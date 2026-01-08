@@ -22,18 +22,16 @@ export function AuthProvider({ children }) {
     const unsub = onSnapshot(doc(db, 'users', currentUser.id), (docSnap) => {
         if (docSnap.exists()) {
             const freshData = { id: docSnap.id, ...docSnap.data() };
-            // Only update state if data actually changed
             if (JSON.stringify(freshData) !== JSON.stringify(currentUser)) {
                 setCurrentUser(freshData);
                 localStorage.setItem('teampulse_user', JSON.stringify(freshData));
             }
         }
     });
-
     return () => unsub();
   }, [currentUser?.id]);
 
-  // --- STANDARD LOGIN (Username/Password) ---
+  // --- STANDARD LOGIN (Web Form - ADMIN ONLY) ---
   async function login(username, password) {
     setLoading(true);
     
@@ -63,7 +61,14 @@ export function AuthProvider({ children }) {
       const docSnap = querySnapshot.docs[0];
       const userData = { id: docSnap.id, ...docSnap.data() };
       
-      // Update status to Online
+      // --- SECURITY CHECK: BLOCK NON-ADMINS ---
+      if (userData.role !== 'ADMIN') {
+          alert("ACCESS DENIED: Team Members must log in using the Desktop Tracker app.");
+          setLoading(false);
+          return false;
+      }
+
+      // Admin Login Success
       await updateDoc(doc(db, 'users', docSnap.id), {
         onlineStatus: 'Online',
         lastSeen: serverTimestamp()
@@ -81,11 +86,10 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // --- NEW: TOKEN LOGIN (For Desktop App Auto-Login) ---
+  // --- TOKEN LOGIN (For Desktop App) ---
   async function loginWithToken(token) {
     setLoading(true);
     try {
-        // Find user with this specific sessionToken
         const q = query(collection(db, 'users'), where('sessionToken', '==', token));
         const snapshot = await getDocs(q);
 
@@ -98,12 +102,10 @@ export function AuthProvider({ children }) {
         const docSnap = snapshot.docs[0];
         const userData = { id: docSnap.id, ...docSnap.data() };
         
-        // Log them in
         setCurrentUser(userData);
         localStorage.setItem('teampulse_user', JSON.stringify(userData));
         setLoading(false);
         return true;
-
     } catch (e) {
         console.error("Token login error:", e);
         setLoading(false);
@@ -118,7 +120,7 @@ export function AuthProvider({ children }) {
         await updateDoc(doc(db, 'users', currentUser.id), {
           onlineStatus: 'Offline',
           lastSeen: serverTimestamp(),
-          sessionToken: null // Clear token on logout
+          sessionToken: null 
         });
       } catch (e) { console.error(e); }
     }
@@ -127,43 +129,30 @@ export function AuthProvider({ children }) {
   }
 
   // --- PASSWORD MANAGEMENT ---
-
-  // 1. Change OWN password
   async function changePassword(newPassword) {
       if(!currentUser || !currentUser.id) return;
       try {
           await updateDoc(doc(db, 'users', currentUser.id), { password: newPassword });
           alert("Your password has been updated successfully.");
-      } catch (e) {
-          console.error(e);
-          alert("Error updating password.");
-      }
+      } catch (e) { console.error(e); alert("Error updating password."); }
   }
 
-  // 2. Admin resets USER password
   async function resetUserPassword(userId, newPassword) {
       try {
           await updateDoc(doc(db, 'users', userId), { password: newPassword });
           alert("User password reset successfully.");
-      } catch (e) {
-          console.error(e);
-          alert("Error resetting password.");
-      }
+      } catch (e) { console.error(e); alert("Error resetting password."); }
   }
 
   const value = {
     currentUser,
     login,
-    loginWithToken, // <--- Exported here
+    loginWithToken,
     logout,
     loading,
     changePassword,
     resetUserPassword
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

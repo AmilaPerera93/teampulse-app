@@ -143,6 +143,9 @@ export default function AdminDashboard() {
             className="card card-hover h-fit cursor-pointer group relative transition-all duration-200 hover:shadow-md border-t-4 border-t-transparent hover:border-t-primary"
           >
             {/* Hover Hint */}
+
+            
+
             <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity text-primary">
                 <ExternalLink size={16} />
             </div>
