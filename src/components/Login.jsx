@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Zap, Download, ShieldLock } from 'lucide-react';
+import { Zap, Download, Shield } from 'lucide-react'; // <--- CHANGED ShieldLock to Shield
 
 export default function Login() {
   const [searchParams] = useSearchParams();
@@ -67,7 +67,7 @@ export default function Login() {
                     onClick={() => setShowAdminLogin(true)}
                     className="mt-8 text-xs text-slate-400 hover:text-slate-600 flex items-center justify-center gap-1 w-full"
                 >
-                    <ShieldLock size={12}/> Admin Access
+                    <Shield size={12}/> Admin Access {/* <--- CHANGED HERE */}
                 </button>
             </div>
         )}
