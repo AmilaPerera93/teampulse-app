@@ -16,12 +16,20 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(false);
 
   // --- REAL-TIME SYNC ---
+  // This listens to changes in the DB (like if an Admin changes your status)
   useEffect(() => {
     if (!currentUser || !currentUser.id || currentUser.id === 'master') return;
 
     const unsub = onSnapshot(doc(db, 'users', currentUser.id), (docSnap) => {
         if (docSnap.exists()) {
             const freshData = { id: docSnap.id, ...docSnap.data() };
+            
+            // If the sessionToken is removed from DB (meaning logged out elsewhere), clear local
+            if (!freshData.sessionToken && currentUser.role !== 'ADMIN') {
+              logoutLocal();
+              return;
+            }
+
             if (JSON.stringify(freshData) !== JSON.stringify(currentUser)) {
                 setCurrentUser(freshData);
                 localStorage.setItem('teampulse_user', JSON.stringify(freshData));
@@ -61,14 +69,13 @@ export function AuthProvider({ children }) {
       const docSnap = querySnapshot.docs[0];
       const userData = { id: docSnap.id, ...docSnap.data() };
       
-      // --- SECURITY CHECK: BLOCK NON-ADMINS ---
+      // SECURITY: Only let Admins use the web form
       if (userData.role !== 'ADMIN') {
           alert("ACCESS DENIED: Team Members must log in using the Desktop Tracker app.");
           setLoading(false);
           return false;
       }
 
-      // Admin Login Success
       await updateDoc(doc(db, 'users', docSnap.id), {
         onlineStatus: 'Online',
         lastSeen: serverTimestamp()
@@ -80,13 +87,12 @@ export function AuthProvider({ children }) {
       return true;
     } catch (error) {
       console.error("Login error:", error);
-      alert("Login failed. Check console.");
       setLoading(false);
       return false;
     }
   }
 
-  // --- TOKEN LOGIN (For Desktop App) ---
+  // --- TOKEN LOGIN (For Desktop App redirection) ---
   async function loginWithToken(token) {
     setLoading(true);
     try {
@@ -94,7 +100,6 @@ export function AuthProvider({ children }) {
         const snapshot = await getDocs(q);
 
         if (snapshot.empty) {
-            console.error("Invalid Token");
             setLoading(false);
             return false;
         }
@@ -107,23 +112,28 @@ export function AuthProvider({ children }) {
         setLoading(false);
         return true;
     } catch (e) {
-        console.error("Token login error:", e);
         setLoading(false);
         return false;
     }
   }
 
   // --- LOGOUT ---
+  // This clears the DB session, which tells Electron to stop tracking.
   async function logout() {
     if (currentUser && currentUser.id && currentUser.id !== 'master') {
       try {
-        await updateDoc(doc(db, 'users', currentUser.id), {
+        const userRef = doc(db, 'users', currentUser.id);
+        await updateDoc(userRef, {
           onlineStatus: 'Offline',
           lastSeen: serverTimestamp(),
-          sessionToken: null 
+          sessionToken: null // CRITICAL: This kills the tracker session
         });
-      } catch (e) { console.error(e); }
+      } catch (e) { console.error("Logout DB Error:", e); }
     }
+    logoutLocal();
+  }
+
+  function logoutLocal() {
     localStorage.removeItem('teampulse_user');
     setCurrentUser(null);
   }
@@ -134,14 +144,14 @@ export function AuthProvider({ children }) {
       try {
           await updateDoc(doc(db, 'users', currentUser.id), { password: newPassword });
           alert("Your password has been updated successfully.");
-      } catch (e) { console.error(e); alert("Error updating password."); }
+      } catch (e) { alert("Error updating password."); }
   }
 
   async function resetUserPassword(userId, newPassword) {
       try {
           await updateDoc(doc(db, 'users', userId), { password: newPassword });
           alert("User password reset successfully.");
-      } catch (e) { console.error(e); alert("Error resetting password."); }
+      } catch (e) { alert("Error resetting password."); }
   }
 
   const value = {
