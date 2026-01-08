@@ -1,29 +1,27 @@
 import React, { useEffect, useState } from 'react';
 import { db } from '../firebase';
-import { collection, query, where, onSnapshot, doc, updateDoc, addDoc, limit } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, updateDoc, addDoc, orderBy, limit, getDocs } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
-import { useDate } from '../contexts/DateContext'; // 1. IMPORT Date Context
-import { formatMs } from '../utils/helpers';
+import { getLocalDate, formatMs } from '../utils/helpers';
 import Timer from './Timer';
-import { Play, Pause, CheckCircle, ZapOff } from 'lucide-react';
+import { Play, Pause, CheckCircle, ZapOff, Zap } from 'lucide-react'; // Import Icons
 
 export default function MemberDashboard() {
   const { currentUser } = useAuth();
-  const { globalDate } = useDate(); // 2. CONSUME globalDate
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [currentInterruption, setCurrentInterruption] = useState(null);
+  const [currentInterruption, setCurrentInterruption] = useState(null); // Track active power cut
+  
+  const today = getLocalDate();
 
   useEffect(() => {
     if (!currentUser) return;
 
-    // 3. LISTEN for Tasks assigned to user
+    // 1. Listen for Tasks
     const qTasks = query(collection(db, 'tasks'), where('assignedTo', '==', currentUser.fullname));
     const unsubTasks = onSnapshot(qTasks, (snapshot) => {
       const fetchedTasks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      
-      // 4. FILTER: Show tasks for the selected globalDate OR any task that is currently running
-      const relevantTasks = fetchedTasks.filter(t => t.date === globalDate || t.isRunning === true);
+      const relevantTasks = fetchedTasks.filter(t => t.date === today || t.isRunning === true);
       
       relevantTasks.sort((a, b) => {
         if (a.isRunning && !b.isRunning) return -1;
@@ -34,7 +32,7 @@ export default function MemberDashboard() {
       setLoading(false);
     });
 
-    // 5. LISTEN for Active Interruptions (Power Cuts)
+    // 2. Listen for Active Interruptions (Power Cuts)
     const qInt = query(
         collection(db, 'interruptions'), 
         where('user', '==', currentUser.fullname),
@@ -50,7 +48,7 @@ export default function MemberDashboard() {
     });
 
     return () => { unsubTasks(); unsubInt(); };
-  }, [currentUser, globalDate]); // 6. RE-RUN when date changes
+  }, [currentUser, today]);
 
   // --- ACTIONS ---
 
@@ -65,6 +63,7 @@ export default function MemberDashboard() {
         const sessionDuration = Date.now() - task.lastStartTime;
         await updateDoc(taskRef, { isRunning: false, elapsedMs: (task.elapsedMs || 0) + sessionDuration, lastStartTime: null });
     } else {
+        // Stop others
         const running = tasks.find(t => t.isRunning);
         if(running) {
              const rRef = doc(db, 'tasks', running.id);
@@ -85,10 +84,13 @@ export default function MemberDashboard() {
 
   const togglePowerCut = async () => {
     if (currentInterruption) {
+        // STOP POWER CUT (RESUME WORK)
         const intRef = doc(db, 'interruptions', currentInterruption.id);
         const duration = Date.now() - currentInterruption.startTime;
         await updateDoc(intRef, { active: false, endTime: Date.now(), durationMs: duration });
     } else {
+        // START POWER CUT
+        // 1. Stop any running tasks automatically
         const running = tasks.find(t => t.isRunning);
         if(running) {
              const rRef = doc(db, 'tasks', running.id);
@@ -96,17 +98,18 @@ export default function MemberDashboard() {
              await updateDoc(rRef, { isRunning: false, elapsedMs: (running.elapsedMs||0) + rDur, lastStartTime: null });
         }
 
+        // 2. Create Interruption Log
         await addDoc(collection(db, 'interruptions'), {
             user: currentUser.fullname,
             type: 'Power Cut',
             startTime: Date.now(),
             active: true,
-            date: globalDate // 7. LOG against the selected date
+            date: today
         });
     }
   };
 
-  if (loading) return <div className="text-center p-10">Loading Dashboard...</div>;
+  if (loading) return <div className="text-center p-10">Loading...</div>;
 
   return (
     <div className="space-y-6">
@@ -132,7 +135,7 @@ export default function MemberDashboard() {
          </div>
       )}
 
-      {/* TASK LIST */}
+      {/* TASK LIST (Same as before, simplified for brevity) */}
       {Object.entries(tasks.reduce((acc, t) => { (acc[t.project] = acc[t.project] || []).push(t); return acc; }, {}))
        .map(([project, pTasks]) => (
         <div key={project}>
@@ -160,12 +163,6 @@ export default function MemberDashboard() {
             </div>
         </div>
       ))}
-      
-      {tasks.length === 0 && (
-        <div className="text-center py-20 bg-slate-50 rounded-xl border-2 border-dashed border-slate-200">
-          <p className="text-slate-500 font-medium">No tasks found for {globalDate}</p>
-        </div>
-      )}
     </div>
   );
 }
