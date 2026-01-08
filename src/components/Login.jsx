@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Zap, Download, Shield } from 'lucide-react';
+import { Zap, Download, Shield } from 'lucide-react'; // <--- CHANGED ShieldLock to Shield
 
 export default function Login() {
   const [searchParams] = useSearchParams();
@@ -32,13 +32,10 @@ export default function Login() {
     }
   }, [searchParams]);
 
-  // 2. ADMIN LOGIN HANDLER (FIXED)
+  // 2. ADMIN LOGIN HANDLER
   const handleAdminLogin = async (e) => {
       e.preventDefault();
-      const success = await login(adminUser, adminPass); // Wait for result
-      if (success) {
-          navigate('/'); // <--- THIS WAS MISSING
-      }
+      await login(adminUser, adminPass);
   };
 
   return (
@@ -70,7 +67,7 @@ export default function Login() {
                     onClick={() => setShowAdminLogin(true)}
                     className="mt-8 text-xs text-slate-400 hover:text-slate-600 flex items-center justify-center gap-1 w-full"
                 >
-                    <Shield size={12}/> Admin Access
+                    <Shield size={12}/> Admin Access {/* <--- CHANGED HERE */}
                 </button>
             </div>
         )}
