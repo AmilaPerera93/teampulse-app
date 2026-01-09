@@ -167,6 +167,7 @@ export default function Layout() {
               <NavItem to="/" icon={LayoutGrid} label="Dashboard" />
               <NavItem to="/users" icon={Users} label="Team" />
               <NavItem to="/projects" icon={FolderOpen} label="Projects" />
+              <NavItem to="/leaves" icon={Calendar} label="Leave Requests" />
               <NavItem to="/resources" icon={BarChart3} label="Resource Plan" />
 
               <div className="px-6 text-xs font-extrabold text-text-sec mt-6 mb-3 tracking-wider">BUSINESS</div>
@@ -177,6 +178,7 @@ export default function Layout() {
             <>
               <div className="px-6 text-xs font-extrabold text-text-sec mb-3 tracking-wider">YOUR WORK</div>
               <NavItem to="/" icon={CheckCircle} label="Today's Tasks" />
+              <NavItem to="/leaves" icon={Calendar} label="My Leave" />
               <NavItem to="/history" icon={History} label="History Log" />
             </>
           )}

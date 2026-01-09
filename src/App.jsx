@@ -12,6 +12,7 @@ import ClientManager from './components/ClientManager';
 import InvoiceManager from './components/InvoiceManager';
 import ResourcePlanner from './components/ResourcePlanner';
 import LeaveManager from './components/LeaveManager';
+import HistoryLog from './components/HistoryLog';
 
 function ProtectedRoute({ children }) {
   const { currentUser } = useAuth();
@@ -43,6 +44,8 @@ export default function App() {
           <Route path="finance" element={<InvoiceManager />} />   
           <Route path="resources" element={<ResourcePlanner />} />
           <Route path="history" element={<div>History Page</div>} />
+          <Route path="leaves" element={<LeaveManager />} />
+          <Route path="history" element={<HistoryLog />} />
         </Route>
       </Routes>
     </BrowserRouter>
