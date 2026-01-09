@@ -3,9 +3,9 @@ import { db } from '../firebase';
 import { collection, query, where, onSnapshot, doc, deleteDoc } from 'firebase/firestore'; 
 import { useDate } from '../contexts/DateContext';
 import { useNavigate } from 'react-router-dom';
-import { ExternalLink, Trash2, ZapOff, CheckCircle, Clock } from 'lucide-react';
+import { ExternalLink, Trash2, ZapOff, CheckCircle, Edit2 } from 'lucide-react'; // ADDED: Edit2
 import Timer from './Timer';
-import EditTaskModal from './EditTaskModal';
+import EditTaskModal from './EditTaskModal'; // ADDED: Import the Modal
 
 export default function AdminDashboard() {
   const { globalDate } = useDate();
@@ -15,6 +15,9 @@ export default function AdminDashboard() {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [, setTick] = useState(0);
+
+  // --- ADDED: State for the task currently being edited ---
+  const [editingTask, setEditingTask] = useState(null); 
 
   // Tick every minute for live durations
   useEffect(() => {
@@ -51,10 +54,16 @@ export default function AdminDashboard() {
   }, [globalDate]);
 
   const handleDeleteTask = async (e, taskId) => {
-    e.stopPropagation(); // Prevents clicking the card when deleting
+    e.stopPropagation(); 
     if(confirm("Are you sure you want to delete this task?")) {
         await deleteDoc(doc(db, 'tasks', taskId));
     }
+  };
+
+  // --- ADDED: Handler to open the edit modal ---
+  const handleEditTask = (e, task) => {
+      e.stopPropagation();
+      setEditingTask(task); 
   };
 
   if (loading) return <div className="text-center p-20 text-slate-400 animate-pulse">Loading Dashboard...</div>;
@@ -87,11 +96,11 @@ export default function AdminDashboard() {
         const userTasks = tasks.filter(t => t.assignedTo === userName);
         userTasks.sort((a,b) => (a.isRunning === b.isRunning ? 0 : a.isRunning ? -1 : 1));
         
-        // Efficiency Calc (Simple version for card view)
+        // Efficiency Calc
         const workedMs = userTasks.reduce((acc, t) => acc + (t.elapsedMs || 0) + (t.isRunning ? (Date.now() - t.lastStartTime) : 0), 0);
-        const efficiency = Math.min(100, Math.round((workedMs / (8 * 3600000)) * 100)); // Simple vs 8h capacity
+        const efficiency = Math.min(100, Math.round((workedMs / (8 * 3600000)) * 100)); 
 
-        // We only show top 3 tasks to keep cards uniform
+        // We only show top 4 tasks
         const visibleTasks = userTasks.slice(0, 4);
         const hiddenCount = userTasks.length - 4;
 
@@ -150,7 +159,7 @@ export default function AdminDashboard() {
                 </div>
             </div>
 
-            {/* TASK LIST AREA - Fills remaining space */}
+            {/* TASK LIST AREA */}
             <div className="flex-1 space-y-2">
                 {visibleTasks.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-slate-300 italic text-sm min-h-[100px]">
@@ -179,14 +188,23 @@ export default function AdminDashboard() {
                                         <Timer startTime={task.lastStartTime} elapsed={task.elapsedMs} isRunning={isRun} />
                                     </span>
                                     
-                                    {/* DELETE BUTTON RESTORED */}
-                                    <button 
-                                        onClick={(e) => handleDeleteTask(e, task.id)}
-                                        className="text-slate-300 hover:text-red-500 transition-colors"
-                                        title="Delete Task"
-                                    >
-                                        <Trash2 size={14} />
-                                    </button>
+                                    {/* --- ADDED: EDIT & DELETE BUTTONS --- */}
+                                    <div className="flex bg-white rounded border border-slate-200 overflow-hidden">
+                                        <button 
+                                            onClick={(e) => handleEditTask(e, task)}
+                                            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors border-r border-slate-200"
+                                            title="Edit Task"
+                                        >
+                                            <Edit2 size={12} />
+                                        </button>
+                                        <button 
+                                            onClick={(e) => handleDeleteTask(e, task.id)}
+                                            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                            title="Delete Task"
+                                        >
+                                            <Trash2 size={12} />
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         );
@@ -194,7 +212,7 @@ export default function AdminDashboard() {
                 )}
             </div>
 
-            {/* FOOTER - Only shows if there are more tasks */}
+            {/* FOOTER */}
             {hiddenCount > 0 && (
                 <div className="pt-3 mt-2 border-t border-slate-100 text-center">
                     <span className="text-xs text-slate-400 font-medium">
@@ -205,6 +223,13 @@ export default function AdminDashboard() {
           </div>
         );
       })}
+
+      {/* --- ADDED: MODAL COMPONENT --- */}
+      <EditTaskModal 
+        isOpen={!!editingTask} 
+        task={editingTask} 
+        onClose={() => setEditingTask(null)} 
+      />
     </div>
   );
 }
