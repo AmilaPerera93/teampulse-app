@@ -1,13 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { db } from '../firebase';
-import { collection, query, where, getDocs, addDoc, updateDoc, doc, onSnapshot, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, updateDoc, doc, onSnapshot, orderBy, deleteDoc } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
 import { useDate } from '../contexts/DateContext';
-import { Calendar, CheckCircle, XCircle, Plus, UserX, Clock, AlertCircle } from 'lucide-react';
+import { Calendar, CheckCircle, XCircle, Plus, UserX, Clock, AlertCircle, Trash2, Edit2 } from 'lucide-react';
 
 export default function LeaveManager() {
   const { currentUser } = useAuth();
-  const { globalDate } = useDate(); // Used to check "Who is away today"
   
   const [leaves, setLeaves] = useState([]); // User's leaves
   const [allLeaves, setAllLeaves] = useState([]); // Admin's view of all leaves
@@ -16,11 +15,13 @@ export default function LeaveManager() {
   const [formData, setFormData] = useState({ type: 'Annual', startDate: '', endDate: '', reason: '' });
   const [loading, setLoading] = useState(true);
 
-  // Configuration (Could be moved to a settings collection later)
+  // Configuration
   const TOTAL_ANNUAL_LEAVES = 14; 
 
   useEffect(() => {
-    if (!currentUser) return;
+    // SECURITY CHECK: Wait for Auth to fully load
+    if (!currentUser || !currentUser.id) return;
+    
     setLoading(true);
 
     if (currentUser.role === 'ADMIN') {
@@ -33,9 +34,14 @@ export default function LeaveManager() {
         return () => unsub();
     } else {
         // --- MEMBER: LISTEN TO MY REQUESTS ---
-        const q = query(collection(db, 'leaves'), where('userId', '==', currentUser.id), orderBy('createdAt', 'desc'));
+        // CRITICAL FIX: Ensure we query by string ID, matching how we save it
+        const q = query(collection(db, 'leaves'), where('userId', '==', currentUser.id)); // removed orderBy temporarily to fix index issues if any
+        
         const unsub = onSnapshot(q, (snap) => {
-            setLeaves(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+            const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            // Client-side sort to avoid composite index requirements on startup
+            list.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+            setLeaves(list);
             setLoading(false);
         });
         return () => unsub();
@@ -73,6 +79,11 @@ export default function LeaveManager() {
   const handleAction = async (id, status) => {
       if(!confirm(`Mark this leave request as ${status}?`)) return;
       await updateDoc(doc(db, 'leaves', id), { status });
+  };
+
+  const handleDelete = async (id) => {
+      if(!confirm("Are you sure you want to cancel this leave request?")) return;
+      await deleteDoc(doc(db, 'leaves', id));
   };
 
   // --- HELPER: CHECK IF USER IS AWAY TODAY ---
@@ -173,7 +184,7 @@ export default function LeaveManager() {
                             <th className="p-4">Duration</th>
                             <th className="p-4">Days</th>
                             <th className="p-4">Status</th>
-                            <th className="p-4 text-right pr-6">Date Applied</th>
+                            <th className="p-4 text-right pr-6">Action</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -193,7 +204,17 @@ export default function LeaveManager() {
                                         {l.status}
                                     </span>
                                 </td>
-                                <td className="p-4 text-right pr-6 text-slate-400 text-xs">{new Date(l.createdAt).toLocaleDateString()}</td>
+                                <td className="p-4 text-right pr-6">
+                                    {l.status === 'Pending' && (
+                                        <button 
+                                            onClick={() => handleDelete(l.id)} 
+                                            className="text-slate-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-lg transition-colors"
+                                            title="Cancel Request"
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                    )}
+                                </td>
                             </tr>
                         ))}
                         {leaves.length === 0 && (
@@ -292,6 +313,7 @@ export default function LeaveManager() {
                             <th className="p-4">Type</th>
                             <th className="p-4">Dates</th>
                             <th className="p-4">Status</th>
+                            <th className="p-4 text-right pr-6">Action</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -305,14 +327,24 @@ export default function LeaveManager() {
                                 <td className="p-4">
                                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border ${
                                         l.status === 'Approved' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                                        'bg-red-50 text-red-600 border-red-100'
+                                        l.status === 'Rejected' ? 'bg-red-50 text-red-600 border-red-100' :
+                                        'bg-amber-50 text-amber-600 border-amber-100'
                                     }`}>
                                         {l.status}
                                     </span>
                                 </td>
+                                <td className="p-4 text-right">
+                                     <button 
+                                        onClick={() => handleDelete(l.id)} 
+                                        className="text-slate-300 hover:text-red-600 p-2 rounded-lg transition-colors"
+                                        title="Delete Record"
+                                    >
+                                        <Trash2 size={14} />
+                                    </button>
+                                </td>
                             </tr>
                         ))}
-                         {pastLeaves.length === 0 && <tr><td colSpan="4" className="p-8 text-center text-slate-400 italic">No past history.</td></tr>}
+                         {pastLeaves.length === 0 && <tr><td colSpan="5" className="p-8 text-center text-slate-400 italic">No past history.</td></tr>}
                     </tbody>
                 </table>
             </div>
