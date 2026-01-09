@@ -5,6 +5,7 @@ import { useDate } from '../contexts/DateContext';
 import { useNavigate } from 'react-router-dom';
 import { ExternalLink, Trash2, ZapOff, CheckCircle, Clock } from 'lucide-react';
 import Timer from './Timer';
+import EditTaskModal from './EditTaskModal';
 
 export default function AdminDashboard() {
   const { globalDate } = useDate();
