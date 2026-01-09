@@ -1,18 +1,34 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
-import { doc, updateDoc } from 'firebase/firestore';
-import { X, Save } from 'lucide-react';
+import { doc, updateDoc, collection, getDocs, query, orderBy } from 'firebase/firestore'; // Added imports for fetching
+import { X, Save, FolderOpen } from 'lucide-react';
 
 export default function EditTaskModal({ isOpen, onClose, task }) {
   const [formData, setFormData] = useState({ description: '', project: '', estHours: 0 });
+  const [projects, setProjects] = useState([]); // State to store project list
   const [loading, setLoading] = useState(false);
 
-  // Populate form when task changes
+  // 1. Fetch Projects List on Mount
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        const q = query(collection(db, 'projects'), orderBy('name')); // Assuming 'name' is the field
+        const snapshot = await getDocs(q);
+        const projList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setProjects(projList);
+      } catch (error) {
+        console.error("Error fetching projects:", error);
+      }
+    };
+    fetchProjects();
+  }, []);
+
+  // 2. Populate form when task data changes
   useEffect(() => {
     if (task) {
       setFormData({
         description: task.description || '',
-        project: task.project || '',
+        project: task.project || '', // This matches the project name text
         estHours: task.estHours || 0
       });
     }
@@ -30,7 +46,7 @@ export default function EditTaskModal({ isOpen, onClose, task }) {
         project: formData.project,
         estHours: parseFloat(formData.estHours)
       });
-      onClose(); // Close modal on success
+      onClose();
     } catch (error) {
       console.error("Error updating task:", error);
       alert("Failed to update task");
@@ -49,6 +65,8 @@ export default function EditTaskModal({ isOpen, onClose, task }) {
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          
+          {/* DESCRIPTION INPUT */}
           <div>
             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Task Description</label>
             <input 
@@ -60,17 +78,28 @@ export default function EditTaskModal({ isOpen, onClose, task }) {
             />
           </div>
 
+          {/* PROJECT SELECT DROPDOWN */}
           <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Project Name</label>
-            <input 
-              type="text" 
-              className="input-field w-full" 
-              value={formData.project}
-              onChange={(e) => setFormData({...formData, project: e.target.value})}
-              required
-            />
+            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Project</label>
+            <div className="relative">
+                <select 
+                  className="input-field w-full appearance-none" 
+                  value={formData.project}
+                  onChange={(e) => setFormData({...formData, project: e.target.value})}
+                  required
+                >
+                  <option value="" disabled>Select a Project</option>
+                  {projects.map(p => (
+                    <option key={p.id} value={p.name}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                <FolderOpen size={16} className="absolute right-3 top-3 text-slate-400 pointer-events-none" />
+            </div>
           </div>
 
+          {/* HOURS INPUT */}
           <div>
             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Estimated Hours</label>
             <input 
