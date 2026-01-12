@@ -3,7 +3,7 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useDate } from '../contexts/DateContext'; 
 import { useTimer } from '../contexts/TimerContext'; 
-// import { useActivityMonitor } from '../hooks/useActivityMonitor'; // (Optional fallback)
+import { useActivityMonitor } from '../hooks/useActivityMonitor'; // (Optional fallback)
 import AssignTaskModal from './AssignTaskModal';   
 import Timer from './Timer';
 import { db } from '../firebase';
