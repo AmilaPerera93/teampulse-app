@@ -44,7 +44,7 @@ export default function App() {
           <Route path="finance" element={<InvoiceManager />} />   
           <Route path="resources" element={<ResourcePlanner />} />
           <Route path="leaves" element={<LeaveManager />} />
-          <Route path="history" element={<HistoryLog />} />
+          <Route path="/history" element={<HistoryLog />} />
           
         </Route>
       </Routes>

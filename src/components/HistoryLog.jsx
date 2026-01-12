@@ -1,65 +1,84 @@
 import React, { useEffect, useState } from 'react';
 import { db } from '../firebase';
-import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
-import { formatMs } from '../utils/helpers';
-import { Calendar, Clock, AlertCircle, Coffee, CheckCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Calendar, Clock, ZapOff, Coffee, ChevronDown, ChevronUp, CheckCircle } from 'lucide-react';
+
+// Format Helper (Local version to ensure no dependency errors)
+const formatMs = (ms) => {
+  if (!ms) return "00:00:00";
+  const totalSeconds = Math.floor(ms / 1000);
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+};
 
 export default function HistoryLog() {
   const { currentUser } = useAuth();
-  const [logs, setLogs] = useState([]);
+  const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [expandedDay, setExpandedDay] = useState(null);
+  const [expandedDate, setExpandedDate] = useState(null);
 
   useEffect(() => {
     if (!currentUser) return;
 
     const fetchHistory = async () => {
       setLoading(true);
+      try {
+        // 1. Fetch Data
+        // Tasks (for Worked Time)
+        const qTasks = query(collection(db, 'tasks'), where('assignedTo', '==', currentUser.fullname));
+        // Breaks
+        const qBreaks = query(collection(db, 'breaks'), where('userId', '==', currentUser.id));
+        // Power Cuts (Finished logs)
+        const qPower = query(collection(db, 'power_logs'), where('userId', '==', currentUser.id));
 
-      // 1. TASKS: assignedTo matches fullname
-      // Note: Ensure your tasks collection actually has 'assignedTo' set to the fullname exactly as it is in auth
-      const qTasks = query(collection(db, 'tasks'), where('assignedTo', '==', currentUser.fullname));
-      
-      // 2. LOGS: userId matches auth id
-      const qIdle = query(collection(db, 'idle_logs'), where('userId', '==', currentUser.id));
-      const qBreaks = query(collection(db, 'breaks'), where('userId', '==', currentUser.id));
+        const [sTasks, sBreaks, sPower] = await Promise.all([
+            getDocs(qTasks), getDocs(qBreaks), getDocs(qPower)
+        ]);
 
-      const [sTasks, sIdle, sBreaks] = await Promise.all([getDocs(qTasks), getDocs(qIdle), getDocs(qBreaks)]);
+        // 2. Group By Date
+        const grouped = {};
 
-      // Group by Date String (YYYY-MM-DD)
-      const grouped = {};
-      
-      const process = (snap, type) => {
-          snap.docs.forEach(doc => {
-              const data = doc.data();
-              // Fallback: if 'date' is missing, try extracting from timestamp
-              let dateKey = data.date;
-              if (!dateKey && data.startTime) {
-                   dateKey = new Date(data.startTime).toISOString().split('T')[0];
-              }
-              if (!dateKey) dateKey = 'Unknown Date';
+        // Process Tasks
+        sTasks.docs.forEach(doc => {
+            const data = doc.data();
+            const date = data.date; 
+            if(!date) return;
+            if(!grouped[date]) grouped[date] = { date, worked: 0, breaks: 0, power: 0, taskCount: 0 };
+            
+            // Add Elapsed Time + (Running time if applicable)
+            let duration = data.elapsedMs || 0;
+            grouped[date].worked += duration;
+            grouped[date].taskCount += 1;
+        });
 
-              if (!grouped[dateKey]) grouped[dateKey] = { date: dateKey, tasks: [], idle: [], breaks: [], totalWorked: 0 };
-              
-              if (type === 'task') {
-                  grouped[dateKey].tasks.push(data);
-                  grouped[dateKey].totalWorked += (data.elapsedMs || 0);
-              } else if (type === 'idle') {
-                  grouped[dateKey].idle.push(data);
-              } else if (type === 'break') {
-                  grouped[dateKey].breaks.push(data);
-              }
-          });
-      };
+        // Process Breaks
+        sBreaks.docs.forEach(doc => {
+            const data = doc.data();
+            const date = data.date;
+            if(!date) return;
+            if(!grouped[date]) grouped[date] = { date, worked: 0, breaks: 0, power: 0, taskCount: 0 };
+            grouped[date].breaks += (data.durationMs || 0);
+        });
 
-      process(sTasks, 'task');
-      process(sIdle, 'idle');
-      process(sBreaks, 'break');
+        // Process Power Cuts
+        sPower.docs.forEach(doc => {
+            const data = doc.data();
+            const date = data.date;
+            if(!date) return;
+            if(!grouped[date]) grouped[date] = { date, worked: 0, breaks: 0, power: 0, taskCount: 0 };
+            grouped[date].power += (data.durationMs || 0);
+        });
 
-      // Sort by date descending
-      const historyArray = Object.values(grouped).sort((a, b) => new Date(b.date) - new Date(a.date));
-      setLogs(historyArray);
+        // 3. Convert to Array & Sort (Newest First)
+        const sortedHistory = Object.values(grouped).sort((a, b) => new Date(b.date) - new Date(a.date));
+        setHistory(sortedHistory);
+
+      } catch (err) {
+          console.error("Error loading history:", err);
+      }
       setLoading(false);
     };
 
@@ -70,119 +89,71 @@ export default function HistoryLog() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in pb-20">
-      <div className="flex justify-between items-center mb-2">
-        <div>
-            <h2 className="text-2xl font-bold text-slate-800">Work History</h2>
-            <p className="text-slate-500">Your past activity logs and timesheets.</p>
-        </div>
+      <div>
+        <h2 className="text-2xl font-bold text-slate-800">My Work History</h2>
+        <p className="text-slate-500">A daily summary of your activity, breaks, and outages.</p>
       </div>
 
-      {logs.length === 0 && (
-          <div className="text-center p-20 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+      {history.length === 0 && (
+          <div className="text-center p-20 bg-white rounded-xl border border-dashed border-slate-200">
               <Calendar className="mx-auto text-slate-300 mb-4" size={48}/>
-              <h3 className="text-slate-500 font-medium">No history records found yet.</h3>
-              <p className="text-xs text-slate-400 mt-2">Complete some tasks or log time to see data here.</p>
+              <h3 className="text-slate-500 font-medium">No work history recorded yet.</h3>
           </div>
       )}
 
-      {logs.map((day) => {
-          const totalIdle = day.idle.reduce((acc, i) => acc + (i.durationMs || 0), 0);
-          const totalBreak = day.breaks.reduce((acc, i) => acc + (i.durationMs || 0), 0);
-          const isExpanded = expandedDay === day.date;
-          
-          // Helper to parse date safely
-          const dateObj = new Date(day.date);
-          const isValidDate = !isNaN(dateObj.getTime());
+      <div className="grid gap-4">
+          {history.map((day) => {
+              const isExpanded = expandedDate === day.date;
+              const dateObj = new Date(day.date);
 
-          return (
-              <div key={day.date} className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm transition-all">
-                  <div 
-                    onClick={() => setExpandedDay(isExpanded ? null : day.date)}
-                    className="p-5 flex items-center justify-between cursor-pointer hover:bg-slate-50"
-                  >
-                      <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-lg flex flex-col items-center justify-center font-bold border border-indigo-100">
-                              {isValidDate ? (
-                                  <>
-                                    <span className="text-xs uppercase">{dateObj.toLocaleString('default', { month: 'short' })}</span>
-                                    <span className="text-xl leading-none">{dateObj.getDate()}</span>
-                                  </>
-                              ) : (
-                                  <span className="text-xs">UNK</span>
-                              )}
-                          </div>
-                          <div>
-                              <h3 className="font-bold text-slate-700">
-                                  {isValidDate ? dateObj.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : day.date}
-                              </h3>
-                              <div className="flex gap-4 text-xs text-slate-500 mt-1">
-                                  <span className="flex items-center gap-1"><Clock size={12}/> Worked: <b className="text-slate-700">{formatMs(day.totalWorked)}</b></span>
-                                  <span className="flex items-center gap-1"><AlertCircle size={12}/> Idle: <b className="text-slate-700">{formatMs(totalIdle)}</b></span>
+              return (
+                  <div key={day.date} className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                      {/* SUMMARY HEADER */}
+                      <div 
+                        onClick={() => setExpandedDate(isExpanded ? null : day.date)}
+                        className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer"
+                      >
+                          <div className="flex items-center gap-4">
+                              <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-xl flex flex-col items-center justify-center border border-indigo-100 shrink-0">
+                                  <span className="text-[10px] font-bold uppercase">{dateObj.toLocaleString('default', { month: 'short' })}</span>
+                                  <span className="text-2xl font-black leading-none">{dateObj.getDate()}</span>
+                              </div>
+                              <div>
+                                  <h3 className="font-bold text-lg text-slate-800">{dateObj.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric' })}</h3>
+                                  <div className="flex gap-2 text-xs text-slate-400 font-medium">
+                                      <span>{day.taskCount} tasks logged</span>
+                                  </div>
                               </div>
                           </div>
-                      </div>
-                      
-                      <div className="flex items-center gap-4">
-                          <div className="text-right hidden sm:block">
-                              <div className="text-xs text-slate-400 font-bold uppercase mb-1">Productivity</div>
-                              <div className="font-mono font-bold text-indigo-600">
-                                  {day.totalWorked > 0 ? Math.round((day.totalWorked / (day.totalWorked + totalIdle + totalBreak)) * 100) : 0}%
+
+                          {/* METRICS ROW */}
+                          <div className="flex items-center gap-2 md:gap-6 flex-wrap">
+                              <MetricBadge icon={Clock} label="Worked" value={formatMs(day.worked)} color="text-emerald-600 bg-emerald-50 border-emerald-100" />
+                              <MetricBadge icon={Coffee} label="Breaks" value={formatMs(day.breaks)} color="text-blue-600 bg-blue-50 border-blue-100" />
+                              <MetricBadge icon={ZapOff} label="Power Cuts" value={formatMs(day.power)} color="text-red-600 bg-red-50 border-red-100" />
+                              
+                              <div className="ml-2 text-slate-300">
+                                  {isExpanded ? <ChevronUp size={20}/> : <ChevronDown size={20}/>}
                               </div>
                           </div>
-                          {isExpanded ? <ChevronUp className="text-slate-400"/> : <ChevronDown className="text-slate-400"/>}
                       </div>
                   </div>
-
-                  {isExpanded && (
-                      <div className="border-t border-slate-100 bg-slate-50/50 p-5 space-y-4">
-                          {/* TASKS */}
-                          <div>
-                              <h4 className="text-xs font-bold text-slate-400 uppercase mb-2 flex items-center gap-2"><CheckCircle size={12}/> Completed Tasks</h4>
-                              <div className="space-y-2">
-                                  {day.tasks.map((t, i) => (
-                                      <div key={i} className="bg-white p-3 rounded border border-slate-200 flex justify-between items-center text-sm">
-                                          <span className="font-medium text-slate-700">{t.description}</span>
-                                          <span className="font-mono text-slate-500">{formatMs(t.elapsedMs)}</span>
-                                      </div>
-                                  ))}
-                                  {day.tasks.length === 0 && <div className="text-xs italic text-slate-400">No tasks logged.</div>}
-                              </div>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-4">
-                              {/* BREAKS */}
-                              <div>
-                                  <h4 className="text-xs font-bold text-slate-400 uppercase mb-2 flex items-center gap-2"><Coffee size={12}/> Breaks</h4>
-                                  <div className="bg-white p-3 rounded border border-slate-200 text-sm space-y-1">
-                                      {day.breaks.map((b, i) => (
-                                          <div key={i} className="flex justify-between text-slate-500">
-                                              <span>{new Date(b.startTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
-                                              <span className="font-mono">{formatMs(b.durationMs)}</span>
-                                          </div>
-                                      ))}
-                                      {day.breaks.length === 0 && <div className="text-xs italic text-slate-400">No breaks taken.</div>}
-                                  </div>
-                              </div>
-                              
-                              {/* IDLE */}
-                              <div>
-                                  <h4 className="text-xs font-bold text-slate-400 uppercase mb-2 flex items-center gap-2"><AlertCircle size={12}/> Idle Sessions</h4>
-                                  <div className="bg-white p-3 rounded border border-slate-200 text-sm space-y-1">
-                                      {day.idle.map((l, i) => (
-                                          <div key={i} className="flex justify-between text-slate-500">
-                                              <span>{new Date(l.startTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
-                                              <span className="font-mono">{formatMs(l.durationMs)}</span>
-                                          </div>
-                                      ))}
-                                      {day.idle.length === 0 && <div className="text-xs italic text-slate-400">No idle time recorded.</div>}
-                                  </div>
-                              </div>
-                          </div>
-                      </div>
-                  )}
-              </div>
-          );
-      })}
+              );
+          })}
+      </div>
     </div>
   );
+}
+
+// Simple Badge Component for cleaner code
+function MetricBadge({ icon: Icon, label, value, color }) {
+    return (
+        <div className={`flex items-center gap-3 px-4 py-2 rounded-lg border ${color}`}>
+            <Icon size={16} />
+            <div className="flex flex-col">
+                <span className="text-[9px] uppercase font-bold opacity-70 leading-none mb-0.5">{label}</span>
+                <span className="font-mono font-bold text-sm leading-none">{value}</span>
+            </div>
+        </div>
+    );
 }
