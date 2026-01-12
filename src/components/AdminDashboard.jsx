@@ -3,9 +3,9 @@ import { db } from '../firebase';
 import { collection, query, where, onSnapshot, doc, deleteDoc } from 'firebase/firestore'; 
 import { useDate } from '../contexts/DateContext';
 import { useNavigate } from 'react-router-dom';
-import { ExternalLink, Trash2, ZapOff, CheckCircle, Edit2 } from 'lucide-react'; // ADDED: Edit2
+import { ExternalLink, Trash2, ZapOff, CheckCircle, Edit2 } from 'lucide-react';
 import Timer from './Timer';
-import EditTaskModal from './EditTaskModal'; // ADDED: Import the Modal
+import EditTaskModal from './EditTaskModal';
 
 export default function AdminDashboard() {
   const { globalDate } = useDate();
@@ -16,7 +16,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [, setTick] = useState(0);
 
-  // --- ADDED: State for the task currently being edited ---
+  // State for the task currently being edited
   const [editingTask, setEditingTask] = useState(null); 
 
   // Tick every minute for live durations
@@ -35,13 +35,12 @@ export default function AdminDashboard() {
             id: d.id, ...d.data(), onlineStatus: d.data().onlineStatus || 'Offline' 
         }));
         
-        // Sort: Power Cut > Break > Online > Idle > Offline
-        userList.sort((a, b) => {
-            const statusOrder = { 'Power Cut': -1, 'Break': 0, 'Online': 1, 'Idle': 2, 'Offline': 3 };
-            return (statusOrder[a.onlineStatus] ?? 3) - (statusOrder[b.onlineStatus] ?? 3);
-        });
+        // --- FIX: SORT ALPHABETICALLY INSTEAD OF BY STATUS ---
+        // This keeps the cards in the same place even when status changes
+        userList.sort((a, b) => a.fullname.localeCompare(b.fullname));
+        
         setUsers(userList);
-        setLoading(false); // Stop loading immediately after users load
+        setLoading(false); 
     });
 
     // 2. LISTEN TO TASKS
@@ -60,7 +59,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // --- ADDED: Handler to open the edit modal ---
   const handleEditTask = (e, task) => {
       e.stopPropagation();
       setEditingTask(task); 
@@ -100,7 +98,6 @@ export default function AdminDashboard() {
         const workedMs = userTasks.reduce((acc, t) => acc + (t.elapsedMs || 0) + (t.isRunning ? (Date.now() - t.lastStartTime) : 0), 0);
         const efficiency = Math.min(100, Math.round((workedMs / (8 * 3600000)) * 100)); 
 
-        // We only show top 4 tasks
         const visibleTasks = userTasks.slice(0, 4);
         const hiddenCount = userTasks.length - 4;
 
@@ -188,7 +185,6 @@ export default function AdminDashboard() {
                                         <Timer startTime={task.lastStartTime} elapsed={task.elapsedMs} isRunning={isRun} />
                                     </span>
                                     
-                                    {/* --- ADDED: EDIT & DELETE BUTTONS --- */}
                                     <div className="flex bg-white rounded border border-slate-200 overflow-hidden">
                                         <button 
                                             onClick={(e) => handleEditTask(e, task)}
@@ -212,7 +208,6 @@ export default function AdminDashboard() {
                 )}
             </div>
 
-            {/* FOOTER */}
             {hiddenCount > 0 && (
                 <div className="pt-3 mt-2 border-t border-slate-100 text-center">
                     <span className="text-xs text-slate-400 font-medium">
@@ -224,7 +219,6 @@ export default function AdminDashboard() {
         );
       })}
 
-      {/* --- ADDED: MODAL COMPONENT --- */}
       <EditTaskModal 
         isOpen={!!editingTask} 
         task={editingTask} 
