@@ -13,8 +13,7 @@ import InvoiceManager from './components/InvoiceManager';
 import ResourcePlanner from './components/ResourcePlanner';
 import LeaveManager from './components/LeaveManager';
 import HistoryLog from './components/HistoryLog';
-//import MeetingManager from './components/MeetingManager';
-
+ 
 function ProtectedRoute({ children }) {
   const { currentUser } = useAuth();
   if (!currentUser) return <Navigate to="/login" replace />;
@@ -44,7 +43,6 @@ export default function App() {
           <Route path="crm" element={<ClientManager />} />
           <Route path="finance" element={<InvoiceManager />} />   
           <Route path="resources" element={<ResourcePlanner />} />
-          <Route path="history" element={<div>History Page</div>} />
           <Route path="leaves" element={<LeaveManager />} />
           <Route path="history" element={<HistoryLog />} />
           
@@ -54,4 +52,4 @@ export default function App() {
   );
 }
 
-//<Route path="/meetings" element={<MeetingManager />} />
+ 

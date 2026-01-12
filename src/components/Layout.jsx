@@ -169,7 +169,7 @@ export default function Layout() {
               <NavItem to="/projects" icon={FolderOpen} label="Projects" />
               <NavItem to="/leaves" icon={Calendar} label="Leave Requests" />
               <NavItem to="/resources" icon={BarChart3} label="Resource Plan" />
-              <NavItem to="/meetings" icon={Video} label="Meetings" />
+               
 
               <div className="px-6 text-xs font-extrabold text-text-sec mt-6 mb-3 tracking-wider">BUSINESS</div>
               <NavItem to="/crm" icon={Briefcase} label="CRM & Leads" />
@@ -181,7 +181,7 @@ export default function Layout() {
               <NavItem to="/" icon={CheckCircle} label="Today's Tasks" />
               <NavItem to="/leaves" icon={Calendar} label="My Leave" />
               <NavItem to="/history" icon={History} label="History Log" />
-              <NavItem to="/meetings" icon={Video} label="Team Meetings" />
+               
             </>
           )}
         </div>
