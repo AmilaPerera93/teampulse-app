@@ -1,14 +1,24 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { db } from '../firebase';
-import { collection, query, where, getDocs, doc, updateDoc, addDoc, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc, addDoc } from 'firebase/firestore';
 import { useDate } from '../contexts/DateContext';
-import { formatMs } from '../utils/helpers';
-import { ArrowLeft, Clock, ZapOff, PlayCircle, Coffee, AlertCircle, CheckCircle, Calendar } from 'lucide-react';
+import { formatMs } from '../utils/helpers'; // Ensure you have this helper or import the local one below
+import { ArrowLeft, ZapOff, PlayCircle, Coffee, AlertCircle, CheckCircle } from 'lucide-react';
 import { Doughnut } from 'react-chartjs-2';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
 
 ChartJS.register(ArcElement, Tooltip, Legend);
+
+// Helper if not imported
+const formatDuration = (ms) => {
+    if (!ms) return "00:00:00";
+    const totalSeconds = Math.floor(ms / 1000);
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+};
 
 export default function MemberDetail() {
   const { username } = useParams();
@@ -49,7 +59,7 @@ export default function MemberDetail() {
       // Clean and Sort Idle Data
       const idlData = sIdle.docs
         .map(d => d.data())
-        .filter(d => d.startTime) // Filter out corrupt empty logs
+        .filter(d => d.startTime) 
         .sort((a,b) => b.startTime - a.startTime);
 
       const brkData = sBreaks.docs.map(d => d.data()).sort((a,b) => b.startTime - a.startTime);
@@ -61,16 +71,14 @@ export default function MemberDetail() {
       setPowerLogs(pwrLogs);
       setActiveInt(!sActive.empty ? {id: sActive.docs[0].id, ...sActive.docs[0].data()} : null);
 
-      // --- CALCULATIONS (Fixed for Safety) ---
+      // --- CALCULATIONS ---
       const wMs = tData.reduce((acc, t) => acc + (t.elapsedMs || 0) + (t.isRunning ? (Date.now() - t.lastStartTime) : 0), 0);
       
-      // FIX: Ensure we parse numbers and handle NaN
       const idlMs = idlData.reduce((acc, i) => acc + (Number(i.durationMs) || 0), 0);
       const brkMs = brkData.reduce((acc, i) => acc + (Number(i.durationMs) || 0), 0);
       const pwrMs = pwrLogs.reduce((acc, i) => acc + (Number(i.durationMs) || 0), 0);
 
       const standardDay = 8 * 60 * 60 * 1000;
-      // Net Available shouldn't go below zero
       const netAvailable = Math.max(0, standardDay - pwrMs - brkMs);
 
       setStats({ 
@@ -132,10 +140,10 @@ export default function MemberDetail() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <MetricCard label="Worked" value={formatMs(stats.worked)} color="border-l-indigo-500 text-indigo-600" />
-        <MetricCard label="Idle Time" value={formatMs(stats.idle)} color="border-l-amber-500 text-amber-600" />
-        <MetricCard label="Breaks" value={formatMs(stats.breaks)} color="border-l-blue-500 text-blue-600" />
-        <MetricCard label="Outages" value={formatMs(stats.downtime)} color="border-l-red-500 text-red-600" />
+        <MetricCard label="Worked" value={formatDuration(stats.worked)} color="border-l-indigo-500 text-indigo-600" />
+        <MetricCard label="Idle Time" value={formatDuration(stats.idle)} color="border-l-amber-500 text-amber-600" />
+        <MetricCard label="Breaks" value={formatDuration(stats.breaks)} color="border-l-blue-500 text-blue-600" />
+        <MetricCard label="Outages" value={formatDuration(stats.downtime)} color="border-l-red-500 text-red-600" />
         <MetricCard label="Efficiency" value={`${score}%`} color="border-l-emerald-500 text-emerald-600" />
       </div>
 
@@ -144,13 +152,13 @@ export default function MemberDetail() {
             
             {/* IDLE LOGS */}
             <Section title="Idle Log" icon={<AlertCircle size={16} className="text-amber-600"/>} css="bg-amber-50/50 border-amber-100">
-                 {idleLogs.length === 0 ? <span className="italic text-slate-400 text-xs">No idle records found.</span> : idleLogs.map((log, i) => (
+                 {idleLogs.length === 0 ? <span className="italic text-slate-400 text-xs">No records found.</span> : idleLogs.map((log, i) => (
                     <div key={i} className="flex justify-between p-2 bg-white rounded border border-amber-100 mb-2 text-sm">
                         <span className="text-slate-500 font-mono">
                             {log.startTime ? new Date(log.startTime).toLocaleTimeString() : 'Unknown'} - 
                             {log.endTime ? new Date(log.endTime).toLocaleTimeString() : '...'}
                         </span>
-                        <span className="font-bold text-amber-700">{formatMs(log.durationMs)}</span>
+                        <span className="font-bold text-amber-700">{formatDuration(log.durationMs)}</span>
                     </div>
                 ))}
             </Section>
@@ -161,7 +169,7 @@ export default function MemberDetail() {
                     {powerLogs.map((log, i) => (
                         <div key={i} className="flex justify-between p-2 bg-white rounded border border-red-100 mb-2 text-sm">
                             <span className="text-slate-500 font-mono">{new Date(log.startTime).toLocaleTimeString()} - {new Date(log.endTime).toLocaleTimeString()}</span>
-                            <span className="font-bold text-red-700">{formatMs(log.durationMs)}</span>
+                            <span className="font-bold text-red-700">{formatDuration(log.durationMs)}</span>
                         </div>
                     ))}
                 </Section>
@@ -169,23 +177,31 @@ export default function MemberDetail() {
                     {breakLogs.map((log, i) => (
                         <div key={i} className="flex justify-between p-2 bg-white rounded border border-blue-100 mb-2 text-sm">
                             <span className="text-slate-500 font-mono">{new Date(log.startTime).toLocaleTimeString()} - {new Date(log.endTime).toLocaleTimeString()}</span>
-                            <span className="font-bold text-blue-700">{formatMs(log.durationMs)}</span>
+                            <span className="font-bold text-blue-700">{formatDuration(log.durationMs)}</span>
                         </div>
                     ))}
                 </Section>
             </div>
             
+            {/* --- UPDATED TASKS SECTION --- */}
             <div className="card">
                 <h3 className="font-bold mb-4 flex items-center gap-2 text-slate-700"><CheckCircle size={18}/> Productive Tasks</h3>
-                {tasks.map((t, i) => (
-                    <div key={i} className="flex justify-between p-3 border-b last:border-0 hover:bg-slate-50 transition-colors">
-                        <div>
-                            <div className="font-medium text-slate-700">{t.description}</div>
-                            <div className="text-[10px] text-slate-400 uppercase font-bold">{t.project}</div>
+                {tasks.map((t, i) => {
+                    const isDone = t.status === 'Done';
+                    return (
+                        <div key={i} className={`flex justify-between p-3 border-b last:border-0 hover:bg-slate-50 transition-colors ${isDone ? 'opacity-70 bg-slate-50' : ''}`}>
+                            <div>
+                                <div className={`font-medium ${isDone ? 'line-through text-slate-400' : 'text-slate-700'}`}>
+                                    {t.description}
+                                </div>
+                                <div className="text-[10px] text-slate-400 uppercase font-bold">{t.project}</div>
+                            </div>
+                            <span className={`font-mono font-bold ${isDone ? 'text-slate-400' : 'text-indigo-600'}`}>
+                                {formatDuration(t.elapsedMs)}
+                            </span>
                         </div>
-                        <span className="font-mono font-bold text-indigo-600">{formatMs(t.elapsedMs)}</span>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </div>
 
@@ -209,7 +225,7 @@ function Section({ title, icon, children, css }) {
     return (
         <div className={`p-4 rounded-xl border ${css}`}>
             <h3 className="font-bold mb-3 flex items-center gap-2 text-sm uppercase tracking-wide">{icon} {title}</h3>
-            <div className="max-h-60 overflow-y-auto pr-2">{children}</div>
+            <div className="max-h-60 overflow-y-auto pr-2 custom-scrollbar">{children}</div>
         </div>
     );
 }
