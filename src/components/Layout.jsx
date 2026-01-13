@@ -11,7 +11,7 @@ import { doc, updateDoc, addDoc, collection, serverTimestamp } from 'firebase/fi
 import { 
   Zap, LayoutGrid, Users, FolderOpen, 
   CheckCircle, History, LogOut, Calendar, Plus,
-  Briefcase, DollarSign, BarChart3, Pause, Play, ZapOff, Coffee, Lock, Loader2, MessageSquare
+  Briefcase, DollarSign, BarChart3, Pause, Play, ZapOff, Coffee, Lock, Loader2
 } from 'lucide-react';
 
 // Format Helper

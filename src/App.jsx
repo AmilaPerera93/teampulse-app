@@ -13,7 +13,7 @@ import InvoiceManager from './components/InvoiceManager';
 import ResourcePlanner from './components/ResourcePlanner';
 import LeaveManager from './components/LeaveManager';
 import HistoryLog from './components/HistoryLog';
-import ChatSystem from './components/ChatSystem'; 
+//import ChatSystem from './components/ChatSystem'; 
 
 function ProtectedRoute({ children }) {
   const { currentUser } = useAuth();
