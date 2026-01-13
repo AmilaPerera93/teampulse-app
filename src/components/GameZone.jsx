@@ -1,30 +1,32 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../firebase';
 import { collection, query, orderBy, limit, getDocs, doc, setDoc, getDoc } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
-import { Trophy, Play, RotateCcw, Gamepad2 } from 'lucide-react';
-
-// GAME CONSTANTS
-const GRID_SIZE = 20;
-const SPEED = 100; // ms
+import { Trophy, Play, RotateCcw, Zap, Flame } from 'lucide-react';
 
 export default function GameZone() {
   const { currentUser } = useAuth();
+  const canvasRef = useRef(null);
   
-  // Game State
-  const [snake, setSnake] = useState([{ x: 10, y: 10 }]);
-  const [food, setFood] = useState({ x: 15, y: 15 });
-  const [direction, setDirection] = useState('RIGHT');
-  const [isPlaying, setIsPlaying] = useState(false);
+  // React State for UI (Score, Game Over screen)
   const [score, setScore] = useState(0);
+  const [highScore, setHighScore] = useState(0);
   const [gameOver, setGameOver] = useState(false);
-  const [highScore, setHighScore] = useState(0); // Personal Best
-
-  // Leaderboard State
+  const [gameStarted, setGameStarted] = useState(false);
   const [leaderboard, setLeaderboard] = useState([]);
-  const gameLoopRef = useRef();
 
-  // 1. INITIAL LOAD (Fetch Leaderboard & Personal Best)
+  // Game Engine State (Refs are used for 60FPS performance without re-renders)
+  const gameState = useRef({
+    playerX: 0,
+    obstacles: [],
+    particles: [], // For explosions
+    speed: 5,
+    score: 0,
+    animationId: null,
+    isGameOver: false
+  });
+
+  // 1. FETCH LEADERBOARD (Standard Quota-Safe Logic)
   useEffect(() => {
     fetchLeaderboard();
     fetchPersonalBest();
@@ -40,203 +42,209 @@ export default function GameZone() {
     if (!currentUser) return;
     const docRef = doc(db, 'high_scores', currentUser.id);
     const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      setHighScore(docSnap.data().score);
-    }
+    if (docSnap.exists()) setHighScore(docSnap.data().score);
   };
 
-  // 2. SAVE SCORE (Only if Personal Best)
-  const handleGameOver = async (finalScore) => {
-    setGameOver(true);
-    setIsPlaying(false);
-    clearInterval(gameLoopRef.current);
-
+  const saveHighScore = async (finalScore) => {
     if (finalScore > highScore) {
       setHighScore(finalScore);
-      // Save to Firebase
       await setDoc(doc(db, 'high_scores', currentUser.id), {
         userId: currentUser.id,
         userName: currentUser.fullname,
         score: finalScore,
         date: new Date().toISOString()
       });
-      // Refresh Leaderboard to show new champion
       fetchLeaderboard();
     }
   };
 
-  // 3. GAME ENGINE
-  const moveSnake = useCallback(() => {
-    setSnake((prevSnake) => {
-      const head = { ...prevSnake[0] };
-
-      switch (direction) {
-        case 'UP': head.y -= 1; break;
-        case 'DOWN': head.y += 1; break;
-        case 'LEFT': head.x -= 1; break;
-        case 'RIGHT': head.x += 1; break;
-        default: break;
-      }
-
-      // Check Collisions (Walls or Self)
-      if (
-        head.x < 0 || head.x >= GRID_SIZE || 
-        head.y < 0 || head.y >= GRID_SIZE ||
-        prevSnake.some(segment => segment.x === head.x && segment.y === head.y)
-      ) {
-        handleGameOver(prevSnake.length - 1);
-        return prevSnake;
-      }
-
-      const newSnake = [head, ...prevSnake];
-
-      // Check Food
-      if (head.x === food.x && head.y === food.y) {
-        setScore(s => s + 1);
-        generateFood();
-      } else {
-        newSnake.pop(); // Remove tail if not eating
-      }
-
-      return newSnake;
-    });
-  }, [direction, food]);
-
-  useEffect(() => {
-    if (isPlaying) {
-      gameLoopRef.current = setInterval(moveSnake, SPEED);
-    }
-    return () => clearInterval(gameLoopRef.current);
-  }, [isPlaying, moveSnake]);
-
-  // 4. CONTROLS
-  useEffect(() => {
-    const handleKey = (e) => {
-      if (!isPlaying) return;
-      switch (e.key) {
-        case 'ArrowUp': if (direction !== 'DOWN') setDirection('UP'); break;
-        case 'ArrowDown': if (direction !== 'UP') setDirection('DOWN'); break;
-        case 'ArrowLeft': if (direction !== 'RIGHT') setDirection('LEFT'); break;
-        case 'ArrowRight': if (direction !== 'LEFT') setDirection('RIGHT'); break;
-        default: break;
-      }
+  // 2. GAME LOOP (The "Engine")
+  const startGame = () => {
+    setGameStarted(true);
+    setGameOver(false);
+    setScore(0);
+    
+    // Reset Engine State
+    gameState.current = {
+      playerX: canvasRef.current.width / 2,
+      obstacles: [],
+      particles: [],
+      speed: 4,
+      score: 0,
+      isGameOver: false,
+      lastSpeedIncrease: 0
     };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, [direction, isPlaying]);
 
-  const generateFood = () => {
-    const x = Math.floor(Math.random() * GRID_SIZE);
-    const y = Math.floor(Math.random() * GRID_SIZE);
-    setFood({ x, y });
+    // Start Loop
+    cancelAnimationFrame(gameState.current.animationId);
+    loop();
   };
 
-  const startGame = () => {
-    setSnake([{ x: 10, y: 10 }]);
-    setScore(0);
-    setDirection('RIGHT');
-    setGameOver(false);
-    setIsPlaying(true);
-    generateFood();
+  const loop = () => {
+    if (gameState.current.isGameOver) return;
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    const state = gameState.current;
+
+    // A. CLEAR SCREEN
+    ctx.fillStyle = '#0f172a'; // Dark Slate BG
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // B. PLAYER (Neon Triangle)
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = '#06b6d4'; // Cyan Glow
+    ctx.fillStyle = '#22d3ee';
+    ctx.beginPath();
+    ctx.moveTo(state.playerX, canvas.height - 80);
+    ctx.lineTo(state.playerX - 20, canvas.height - 30);
+    ctx.lineTo(state.playerX + 20, canvas.height - 30);
+    ctx.fill();
+    ctx.shadowBlur = 0; // Reset for other items
+
+    // C. SPAWN OBSTACLES (Random red blocks)
+    if (Math.random() < 0.02 + (state.score * 0.0001)) { // Spawn rate increases with score
+      state.obstacles.push({
+        x: Math.random() * (canvas.width - 40) + 20,
+        y: -50,
+        width: Math.random() * 40 + 30, // Random size
+        height: 30,
+        speed: state.speed
+      });
+    }
+
+    // D. MOVE & DRAW OBSTACLES
+    state.obstacles.forEach((obs, index) => {
+      obs.y += obs.speed;
+      
+      // Draw Obstacle
+      ctx.fillStyle = '#f43f5e'; // Rose Red
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = '#e11d48';
+      ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+      ctx.shadowBlur = 0;
+
+      // Collision Detection
+      if (
+        obs.y + obs.height > canvas.height - 80 && // Top of ship
+        obs.y < canvas.height - 30 &&              // Bottom of ship
+        obs.x < state.playerX + 15 &&              // Right wing
+        obs.x + obs.width > state.playerX - 15     // Left wing
+      ) {
+        endGame();
+      }
+
+      // Remove off-screen obstacles & Add Score
+      if (obs.y > canvas.height) {
+        state.obstacles.splice(index, 1);
+        state.score += 10;
+        setScore(state.score); // Sync with React
+
+        // Increase Speed every 500 points
+        if (state.score % 500 === 0 && state.speed < 15) {
+            state.speed += 0.5;
+        }
+      }
+    });
+
+    state.animationId = requestAnimationFrame(loop);
+  };
+
+  const endGame = () => {
+    gameState.current.isGameOver = true;
+    cancelAnimationFrame(gameState.current.animationId);
+    setGameOver(true);
+    saveHighScore(gameState.current.score);
+  };
+
+  // 3. CONTROLS (Mouse/Touch Follow)
+  const handleMouseMove = (e) => {
+    if (!gameStarted || gameOver) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    gameState.current.playerX = e.clientX - rect.left;
   };
 
   return (
     <div className="flex flex-col lg:flex-row h-[calc(100vh-100px)] gap-6 p-6 animate-in fade-in">
       
-      {/* LEFT: GAME BOARD */}
-      <div className="flex-1 bg-slate-900 rounded-3xl shadow-2xl border-4 border-slate-800 flex flex-col items-center justify-center relative overflow-hidden">
-        
-        {/* Score Header */}
-        <div className="absolute top-6 left-0 right-0 flex justify-center gap-10 text-white font-mono z-10">
-          <div className="text-xl">SCORE: <span className="text-emerald-400 font-bold">{score}</span></div>
-          <div className="text-xl opacity-50">BEST: {highScore}</div>
+      {/* GAME AREA */}
+      <div className="flex-1 bg-slate-900 rounded-3xl shadow-2xl overflow-hidden relative border-4 border-slate-800 group cursor-none">
+        <canvas
+          ref={canvasRef}
+          width={800}
+          height={600}
+          className="w-full h-full object-cover"
+          onMouseMove={handleMouseMove}
+        />
+
+        {/* HUD (Heads Up Display) */}
+        <div className="absolute top-6 left-6 text-white font-mono z-10 pointer-events-none">
+          <div className="text-3xl font-black italic flex items-center gap-2">
+            <Zap className="text-yellow-400 fill-yellow-400" /> 
+            {score}
+          </div>
+          <div className="text-sm text-cyan-400 mt-1 opacity-80">SPEED: {gameState.current?.speed?.toFixed(1) || 4}x</div>
         </div>
 
-        {/* The Grid */}
-        <div 
-          className="relative bg-black/50 border-2 border-slate-700 shadow-inner"
-          style={{ width: `${GRID_SIZE * 25}px`, height: `${GRID_SIZE * 25}px` }}
-        >
-          {!isPlaying && !gameOver && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20 text-white">
-              <Gamepad2 size={64} className="mb-4 text-emerald-500" />
-              <button onClick={startGame} className="bg-emerald-500 hover:bg-emerald-600 text-white px-8 py-3 rounded-full font-bold text-lg transition-transform hover:scale-105 flex items-center gap-2">
-                <Play fill="currentColor" /> START GAME
-              </button>
-              <p className="mt-4 text-sm text-slate-400">Use Arrow Keys to Move</p>
-            </div>
-          )}
+        {/* START SCREEN */}
+        {!gameStarted && !gameOver && (
+          <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center text-white z-20">
+            <h1 className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-600 mb-4 tracking-tighter filter drop-shadow-[0_0_10px_rgba(6,182,212,0.5)]">
+              NEON RUSH
+            </h1>
+            <button onClick={startGame} className="bg-cyan-500 hover:bg-cyan-400 text-black px-10 py-4 rounded-full font-black text-xl transition-all hover:scale-110 shadow-[0_0_20px_rgba(6,182,212,0.6)] flex items-center gap-3">
+              <Play fill="black" size={24} /> LAUNCH
+            </button>
+            <p className="mt-6 text-slate-400 font-mono text-sm">Use your MOUSE to dodge obstacles</p>
+          </div>
+        )}
 
-          {gameOver && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-900/90 z-20 text-white animate-in zoom-in">
-              <h2 className="text-4xl font-black mb-2">GAME OVER</h2>
-              <p className="text-xl mb-6">Final Score: {score}</p>
-              <button onClick={startGame} className="bg-white text-red-600 px-8 py-3 rounded-full font-bold text-lg hover:bg-slate-100 flex items-center gap-2">
-                <RotateCcw /> TRY AGAIN
-              </button>
-            </div>
-          )}
-
-          {/* Snake */}
-          {snake.map((segment, i) => (
-            <div
-              key={i}
-              className="absolute bg-emerald-400 rounded-sm shadow-[0_0_10px_rgba(52,211,153,0.8)]"
-              style={{
-                left: `${segment.x * 25}px`,
-                top: `${segment.y * 25}px`,
-                width: '23px',
-                height: '23px',
-                opacity: i === 0 ? 1 : 0.6 // Head is brighter
-              }}
-            />
-          ))}
-
-          {/* Food */}
-          <div
-            className="absolute bg-rose-500 rounded-full animate-bounce shadow-[0_0_15px_rgba(244,63,94,0.8)]"
-            style={{
-              left: `${food.x * 25}px`,
-              top: `${food.y * 25}px`,
-              width: '23px',
-              height: '23px',
-            }}
-          />
-        </div>
+        {/* GAME OVER SCREEN */}
+        {gameOver && (
+          <div className="absolute inset-0 bg-red-900/90 flex flex-col items-center justify-center text-white z-20 animate-in zoom-in duration-300">
+            <Flame size={80} className="text-orange-500 mb-4 animate-bounce" />
+            <h2 className="text-5xl font-black mb-2 tracking-wide">CRITICAL FAILURE</h2>
+            <div className="text-2xl mb-8 font-mono">FINAL SCORE: <span className="text-yellow-400 font-bold">{score}</span></div>
+            
+            <button onClick={startGame} className="bg-white text-red-600 px-8 py-3 rounded-full font-bold text-lg hover:bg-slate-100 flex items-center gap-2 transition-transform hover:scale-105">
+              <RotateCcw size={20} /> RESTART MISSION
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* RIGHT: LEADERBOARD */}
-      <div className="w-full lg:w-80 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-        <div className="p-6 bg-gradient-to-r from-indigo-600 to-purple-600 text-white">
-          <div className="flex items-center gap-2 mb-1">
-            <Trophy size={24} className="text-yellow-300" />
-            <h2 className="text-xl font-black tracking-wider">TOP PLAYERS</h2>
+      {/* LEADERBOARD (Right Side) */}
+      <div className="w-full lg:w-80 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full">
+        <div className="p-6 bg-slate-900 text-white border-b border-slate-800">
+          <div className="flex items-center gap-3 mb-2">
+            <Trophy className="text-yellow-400" />
+            <h2 className="font-black tracking-widest text-lg">ACE PILOTS</h2>
           </div>
-          <p className="text-xs text-indigo-100 opacity-80">Can you beat the high score?</p>
+          <div className="flex justify-between items-end">
+            <div className="text-xs text-slate-400">Your Best</div>
+            <div className="text-xl font-mono text-cyan-400 font-bold">{highScore}</div>
+          </div>
         </div>
-        
-        <div className="flex-1 overflow-y-auto p-2">
+
+        <div className="flex-1 overflow-y-auto p-2 bg-slate-50">
           {leaderboard.map((entry, index) => (
-            <div key={index} className={`flex items-center p-3 mb-2 rounded-xl border ${index === 0 ? 'bg-yellow-50 border-yellow-200' : 'bg-white border-slate-100'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold mr-3 ${
+            <div key={index} className={`flex items-center p-3 mb-2 rounded-xl border transition-all hover:scale-[1.02] ${index === 0 ? 'bg-yellow-50 border-yellow-200 shadow-sm' : 'bg-white border-slate-200'}`}>
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold mr-3 text-sm ${
                 index === 0 ? 'bg-yellow-400 text-yellow-900' : 
                 index === 1 ? 'bg-slate-300 text-slate-700' : 
                 index === 2 ? 'bg-orange-200 text-orange-800' : 'bg-slate-100 text-slate-500'
               }`}>
                 {index + 1}
               </div>
-              <div className="flex-1">
-                <div className="font-bold text-slate-800 text-sm">{entry.userName}</div>
-                <div className="text-[10px] text-slate-400">Rank #{index + 1}</div>
+              <div className="flex-1 min-w-0">
+                <div className="font-bold text-slate-800 text-sm truncate">{entry.userName}</div>
+                <div className="text-[10px] text-slate-400 font-medium">Rank #{index + 1}</div>
               </div>
-              <div className="font-mono font-bold text-indigo-600 text-lg">
+              <div className="font-mono font-bold text-indigo-600">
                 {entry.score}
               </div>
             </div>
           ))}
-          {leaderboard.length === 0 && (
-            <div className="text-center p-8 text-slate-400 italic text-sm">No scores yet. Be the first!</div>
-          )}
         </div>
       </div>
     </div>
