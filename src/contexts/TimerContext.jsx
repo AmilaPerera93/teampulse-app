@@ -35,7 +35,10 @@ export function TimerProvider({ children }) {
     });
 
     return () => { unsubTask(); unsubInt(); };
-  }, [currentUser]);
+    
+    // ✅ FIX: Only restart if the User ID or Name changes (e.g. logout/login)
+    // We IGNORE timestamp updates here.
+  }, [currentUser?.id, currentUser?.fullname]);
 
   const startTask = async (task) => {
     if (activeInterruption) return alert("Cannot start work during a Power Cut!");
