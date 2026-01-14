@@ -33,60 +33,54 @@ export function AuthProvider({ children }) {
     return () => unsub();
   }, [currentUser?.id]);
 
-  // --- LOGIN ---
   async function login(username, password) {
-    setLoading(true);
-    
-    // Master Admin
-    if (username === 'admin' && password === 'admin123') {
-      const masterData = { fullname: 'Master Admin', username: 'admin', role: 'ADMIN', id: 'master' };
-      setCurrentUser(masterData);
-      localStorage.setItem('teampulse_user', JSON.stringify(masterData));
-      setLoading(false);
-      return true;
-    }
+  setLoading(true);
+  
+  // Master Admin
+  if (username === 'admin' && password === 'admin123') {
+    const masterData = { fullname: 'Master Admin', username: 'admin', role: 'ADMIN', id: 'master' };
+    setCurrentUser(masterData);
+    localStorage.setItem('teampulse_user', JSON.stringify(masterData));
+    setLoading(false);
+    return true;
+  }
 
-    try {
-      const q = query(
-        collection(db, 'users'),
-        where('username', '==', username),
-        where('password', '==', password)
-      );
-      const querySnapshot = await getDocs(q);
+  try {
+    const q = query(
+      collection(db, 'users'),
+      where('username', '==', username),
+      where('password', '==', password)
+    );
+    const querySnapshot = await getDocs(q);
 
-      if (querySnapshot.empty) {
-        alert("Invalid Username or Password");
-        setLoading(false);
-        return false;
-      }
-
-      const docSnap = querySnapshot.docs[0];
-      const userData = { id: docSnap.id, ...docSnap.data() };
-      
-      // ADMINS ONLY on Web
-      if (userData.role !== 'ADMIN') {
-          alert("ACCESS DENIED: Please use the Desktop Tracker app.");
-          setLoading(false);
-          return false;
-      }
-
-      // Mark Admin Online
-      await updateDoc(doc(db, 'users', docSnap.id), {
-        onlineStatus: 'Online',
-        lastSeen: serverTimestamp()
-      });
-
-      setCurrentUser(userData);
-      localStorage.setItem('teampulse_user', JSON.stringify(userData));
-      setLoading(false);
-      return true;
-    } catch (error) {
-      console.error("Login error:", error);
+    if (querySnapshot.empty) {
+      alert("Invalid Username or Password");
       setLoading(false);
       return false;
     }
-  }
 
+    const docSnap = querySnapshot.docs[0];
+    const userData = { id: docSnap.id, ...docSnap.data() };
+    
+    // --- EMERGENCY FIX: ALLOW ALL ROLES ON WEB ---
+    // Removed the "ADMIN ONLY" block here so Members can log in today.
+
+    // Mark User Online
+    await updateDoc(doc(db, 'users', docSnap.id), {
+      onlineStatus: 'Online',
+      lastSeen: serverTimestamp()
+    });
+
+    setCurrentUser(userData);
+    localStorage.setItem('teampulse_user', JSON.stringify(userData));
+    setLoading(false);
+    return true;
+  } catch (error) {
+    console.error("Login error:", error);
+    setLoading(false);
+    return false;
+  }
+}
   // --- TOKEN LOGIN ---
   async function loginWithToken(token) {
     setLoading(true);
