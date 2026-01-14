@@ -32,7 +32,7 @@ export default function GameZone() {
   useEffect(() => {
     fetchLeaderboard();
     fetchPersonalBest();
-  }, [currentUser]);
+  }, [currentUser?.id]);
 
   const fetchLeaderboard = async () => {
     const q = query(collection(db, 'high_scores'), orderBy('score', 'desc'), limit(10));
