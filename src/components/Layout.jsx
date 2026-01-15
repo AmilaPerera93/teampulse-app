@@ -11,7 +11,7 @@ import { doc, updateDoc, addDoc, collection, serverTimestamp } from 'firebase/fi
 import { 
   Zap, LayoutGrid, Users, FolderOpen, 
   CheckCircle, History, LogOut, Calendar, Plus,
-  Briefcase, DollarSign, BarChart3, Pause, Play, ZapOff, Coffee, Lock, Loader2, Gamepad2
+  Briefcase, DollarSign, BarChart3, Pause, Play, ZapOff, Coffee, Lock, Loader2, Gamepad2, Presentation
 } from 'lucide-react';
 
 // Format Helper
@@ -187,6 +187,7 @@ export default function Layout() {
             <>
               <div className="px-6 text-xs font-extrabold text-text-sec mb-3 tracking-wider">MANAGEMENT</div>
               <NavItem to="/" icon={LayoutGrid} label="Dashboard" />
+              <NavItem to="/meeting" icon={Presentation} label="Morning Standup" />
               <NavItem to="/users" icon={Users} label="Team" />
               <NavItem to="/projects" icon={FolderOpen} label="Projects" />
               <NavItem to="/leaves" icon={Calendar} label="Leave Requests" />

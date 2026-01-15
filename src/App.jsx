@@ -14,6 +14,7 @@ import ResourcePlanner from './components/ResourcePlanner';
 import LeaveManager from './components/LeaveManager';
 import HistoryLog from './components/HistoryLog';
 import GameZone from './components/GameZone';
+import MorningMeeting from './components/MorningMeeting';
 
 function ProtectedRoute({ children }) {
   const { currentUser } = useAuth();
@@ -47,7 +48,7 @@ export default function App() {
           <Route path="leaves" element={<LeaveManager />} />
           <Route path="/history" element={<HistoryLog />} />
           <Route path="game" element={<GameZone />} />
-           
+          <Route path="meeting" element={<MorningMeeting />} /> 
         </Route>
       </Routes>
     </BrowserRouter>
