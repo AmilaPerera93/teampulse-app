@@ -3,14 +3,13 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { db } from '../firebase';
 import { collection, query, where, getDocs, doc, updateDoc, addDoc } from 'firebase/firestore';
 import { useDate } from '../contexts/DateContext';
-import { formatMs } from '../utils/helpers'; // Ensure you have this helper or import the local one below
 import { ArrowLeft, ZapOff, PlayCircle, Coffee, AlertCircle, CheckCircle } from 'lucide-react';
 import { Doughnut } from 'react-chartjs-2';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
-// Helper if not imported
+// Helper for formatting durations
 const formatDuration = (ms) => {
     if (!ms) return "00:00:00";
     const totalSeconds = Math.floor(ms / 1000);
@@ -55,35 +54,68 @@ export default function MemberDetail() {
       ]);
 
       const tData = sTasks.docs.map(d => ({...d.data(), id: d.id}));
-      
-      // Clean and Sort Idle Data
       const idlData = sIdle.docs
         .map(d => d.data())
         .filter(d => d.startTime) 
-        .sort((a,b) => b.startTime - a.startTime);
+        .sort((a,b) => a.startTime - b.startTime); // Sorted Ascending for pattern detection
 
       const brkData = sBreaks.docs.map(d => d.data()).sort((a,b) => b.startTime - a.startTime);
       const pwrLogs = sPower.docs.map(d => d.data()).sort((a,b) => b.startTime - a.startTime);
 
       setTasks(tData);
-      setIdleLogs(idlData);
+      setIdleLogs([...idlData].reverse()); // Reverse for UI display (Newest first)
       setBreakLogs(brkData);
       setPowerLogs(pwrLogs);
       setActiveInt(!sActive.empty ? {id: sActive.docs[0].id, ...sActive.docs[0].data()} : null);
 
       // --- CALCULATIONS ---
       const wMs = tData.reduce((acc, t) => acc + (t.elapsedMs || 0) + (t.isRunning ? (Date.now() - t.lastStartTime) : 0), 0);
-      
-      const idlMs = idlData.reduce((acc, i) => acc + (Number(i.durationMs) || 0), 0);
       const brkMs = brkData.reduce((acc, i) => acc + (Number(i.durationMs) || 0), 0);
       const pwrMs = pwrLogs.reduce((acc, i) => acc + (Number(i.durationMs) || 0), 0);
+
+      // --- NEW STRICT IDLE LOGIC ---
+      let calculatedIdleMs = 0;
+      let patternBuffer = [];
+
+      idlData.forEach((log, index) => {
+          const duration = Number(log.durationMs) || 0;
+          const TEN_MINS = 10 * 60 * 1000;
+          const SPECIFIC_50S = 50 * 1000;
+          const SPECIFIC_110S = 110 * 1000;
+
+          // SCENARIO 1: Record is 10 minutes or longer
+          if (duration >= TEN_MINS) {
+              calculatedIdleMs += duration;
+              // Check if we just ended a pattern before this long break
+              if (patternBuffer.length >= 3) {
+                  calculatedIdleMs += patternBuffer.reduce((a, b) => a + b, 0);
+              }
+              patternBuffer = [];
+          } 
+          // SCENARIO 2: Specific pattern detection (Exactly 50s or 110s)
+          else if (duration === SPECIFIC_50S || duration === SPECIFIC_110S) {
+              patternBuffer.push(duration);
+          } 
+          // Reset buffer if record doesn't match criteria
+          else {
+              if (patternBuffer.length >= 3) {
+                  calculatedIdleMs += patternBuffer.reduce((a, b) => a + b, 0);
+              }
+              patternBuffer = [];
+          }
+
+          // Final check at end of array
+          if (index === idlData.length - 1 && patternBuffer.length >= 3) {
+              calculatedIdleMs += patternBuffer.reduce((a, b) => a + b, 0);
+          }
+      });
 
       const standardDay = 8 * 60 * 60 * 1000;
       const netAvailable = Math.max(0, standardDay - pwrMs - brkMs);
 
       setStats({ 
           worked: wMs, 
-          idle: idlMs, 
+          idle: calculatedIdleMs, 
           breaks: brkMs, 
           downtime: pwrMs, 
           netAvailable 
@@ -141,7 +173,7 @@ export default function MemberDetail() {
 
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <MetricCard label="Worked" value={formatDuration(stats.worked)} color="border-l-indigo-500 text-indigo-600" />
-        <MetricCard label="Idle Time" value={formatDuration(stats.idle)} color="border-l-amber-500 text-amber-600" />
+        <MetricCard label="Filtered Idle" value={formatDuration(stats.idle)} color="border-l-amber-500 text-amber-600" />
         <MetricCard label="Breaks" value={formatDuration(stats.breaks)} color="border-l-blue-500 text-blue-600" />
         <MetricCard label="Outages" value={formatDuration(stats.downtime)} color="border-l-red-500 text-red-600" />
         <MetricCard label="Efficiency" value={`${score}%`} color="border-l-emerald-500 text-emerald-600" />
@@ -151,7 +183,7 @@ export default function MemberDetail() {
         <div className="lg:col-span-2 space-y-6">
             
             {/* IDLE LOGS */}
-            <Section title="Idle Log" icon={<AlertCircle size={16} className="text-amber-600"/>} css="bg-amber-50/50 border-amber-100">
+            <Section title="Raw Idle Log" icon={<AlertCircle size={16} className="text-amber-600"/>} css="bg-amber-50/50 border-amber-100">
                  {idleLogs.length === 0 ? <span className="italic text-slate-400 text-xs">No records found.</span> : idleLogs.map((log, i) => (
                     <div key={i} className="flex justify-between p-2 bg-white rounded border border-amber-100 mb-2 text-sm">
                         <span className="text-slate-500 font-mono">
@@ -183,7 +215,6 @@ export default function MemberDetail() {
                 </Section>
             </div>
             
-            {/* --- UPDATED TASKS SECTION --- */}
             <div className="card">
                 <h3 className="font-bold mb-4 flex items-center gap-2 text-slate-700"><CheckCircle size={18}/> Productive Tasks</h3>
                 {tasks.map((t, i) => {
@@ -208,7 +239,7 @@ export default function MemberDetail() {
         <div className="card h-fit sticky top-6 flex flex-col items-center">
             <h3 className="font-bold mb-6 text-slate-700">Time Split</h3>
             <Doughnut data={{
-                labels: ['Work', 'Idle', 'Break', 'Power'],
+                labels: ['Work', 'Filtered Idle', 'Break', 'Power'],
                 datasets: [{
                     data: [stats.worked, stats.idle, stats.breaks, stats.downtime],
                     backgroundColor: ['#6366f1', '#f59e0b', '#3b82f6', '#ef4444'],
