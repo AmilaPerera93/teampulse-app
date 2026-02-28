@@ -23,39 +23,32 @@ export function AuthProvider({ children }) {
     return savedUser ? JSON.parse(savedUser) : null;
   });
   const [loading, setLoading] = useState(false);
-  
-  // A ref to prevent the "Logout Loop"
   const isLoggingOut = useRef(false);
 
   // --- REAL-TIME SYNC & SECURITY GUARD ---
   useEffect(() => {
-    // Stop if no user, if it's the master admin, or if we are currently logging out
     if (!currentUser || !currentUser.id || currentUser.id === 'master' || isLoggingOut.current) return;
 
-    // Listen to the user's record in real-time
     const unsub = onSnapshot(doc(db, 'users', currentUser.id), (docSnap) => {
-        // If we started logging out while the snapshot was in flight, ignore it
         if (isLoggingOut.current) return;
 
         if (docSnap.exists()) {
             const freshData = { id: docSnap.id, ...docSnap.data() };
             
-            // 🚨 SECURITY GUARD (PATCHED) 🚨
-            // Check if a MEMBER has lost their session token
-            if (freshData.role !== 'ADMIN' && !freshData.sessionToken) {
+            // ✅ FIX: Added !loading check. 
+            // This prevents the security guard from kicking you out 
+            // while the loginWithToken process is still finishing.
+            if (freshData.role !== 'ADMIN' && !freshData.sessionToken && !loading) {
                  console.warn("Security Alert: No Desktop Session detected. Terminating session.");
                  logout(); 
                  return;
             }
 
-            // Normal Sync: Only update local state if data actually changed
-            // Using JSON.stringify ensures we don't trigger re-renders for identical data
             if (JSON.stringify(freshData) !== JSON.stringify(currentUser)) {
                 setCurrentUser(freshData);
                 localStorage.setItem('teampulse_user', JSON.stringify(freshData));
             }
         } else {
-            // User deleted from DB
             logout();
         }
     }, (error) => {
@@ -63,13 +56,12 @@ export function AuthProvider({ children }) {
     });
 
     return () => unsub();
-  }, [currentUser?.id]); // Only re-run if the User ID physically changes
+  }, [currentUser?.id, loading]); // Added loading to dependency array
 
   async function login(username, password) {
     setLoading(true);
-    isLoggingOut.current = false; // Reset flag on login attempt
+    isLoggingOut.current = false; 
     
-    // Master Admin Login
     if (username === 'admin' && password === 'admin123') {
       const masterData = { fullname: 'Master Admin', username: 'admin', role: 'ADMIN', id: 'master' };
       setCurrentUser(masterData);
@@ -95,7 +87,6 @@ export function AuthProvider({ children }) {
       const docSnap = querySnapshot.docs[0];
       const userData = { id: docSnap.id, ...docSnap.data() };
       
-      // Block members from web login
       if (userData.role !== 'ADMIN') {
          alert("ACCESS DENIED: Team Members must use the Desktop App.");
          setLoading(false);
@@ -119,19 +110,24 @@ export function AuthProvider({ children }) {
   }
 
   async function loginWithToken(token) {
-    setLoading(true);
+    setLoading(true); // Triggers the !loading guard in useEffect
     isLoggingOut.current = false;
     try {
         const q = query(collection(db, 'users'), where('sessionToken', '==', token));
         const snapshot = await getDocs(q);
-        if (snapshot.empty) { setLoading(false); return false; }
+        if (snapshot.empty) { 
+          setLoading(false); 
+          return false; 
+        }
 
         const docSnap = snapshot.docs[0];
         const userData = { id: docSnap.id, ...docSnap.data() };
         
         setCurrentUser(userData);
         localStorage.setItem('teampulse_user', JSON.stringify(userData));
-        setLoading(false);
+        
+        // Give the state 1 second to settle before turning off loading
+        setTimeout(() => setLoading(false), 1000); 
         return true;
     } catch (e) {
         setLoading(false);
@@ -140,12 +136,10 @@ export function AuthProvider({ children }) {
   }
 
   async function logout() {
-    // Set flag immediately to stop the onSnapshot loop
     isLoggingOut.current = true;
 
     if (currentUser && currentUser.id && currentUser.id !== 'master') {
       try {
-        // 1. Pause any running tasks
         const qRunning = query(
             collection(db, 'tasks'), 
             where('assignedTo', '==', currentUser.fullname), 
@@ -166,7 +160,6 @@ export function AuthProvider({ children }) {
         });
         await Promise.all(updates);
 
-        // 2. Clear Session in Database
         await updateDoc(doc(db, 'users', currentUser.id), {
           onlineStatus: 'Offline',
           lastSeen: serverTimestamp(),
@@ -176,7 +169,6 @@ export function AuthProvider({ children }) {
       } catch (e) { console.error("Logout Error:", e); }
     }
     
-    // 3. Clean up local state
     localStorage.removeItem('teampulse_user');
     setCurrentUser(null);
   }
