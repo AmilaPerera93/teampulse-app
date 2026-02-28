@@ -3,7 +3,7 @@ import { db } from '../firebase';
 import { doc, updateDoc, serverTimestamp, addDoc, collection } from 'firebase/firestore';
 
 // 5 Minutes Idle Threshold (Normal usage)
-const IDLE_THRESHOLD = 2 * 1000; 
+const IDLE_THRESHOLD = 20 * 1000; // Updated to your 20s test limit
 const HEARTBEAT_INTERVAL = 2 * 60 * 1000;
 
 export function useActivityMonitor(user) {
@@ -15,13 +15,6 @@ export function useActivityMonitor(user) {
   // Helper to update status
   const setStatus = async (status) => {
     if (!user || !user.id) return;
-    
-    // 1. If we are currently on a "Break", DO NOT overwrite it with "Online" or "Idle"
-    // We check the local storage or a ref to see if we are in break mode?
-    // Actually, we can check the user object passed in if it syncs real-time, 
-    // but simpler is to let the component handle the "Break" logic manually.
-    // For this hook, we strictly handle "Active" vs "Idle".
-    
     if (user.onlineStatus === 'Break') return; 
 
     try {
@@ -37,7 +30,7 @@ export function useActivityMonitor(user) {
     if (!idleStartTime.current || !user.id) return;
     
     const duration = Date.now() - idleStartTime.current;
-    if (duration > 1000) { // Only log if > 1 second
+    if (duration > 1000) { 
         try {
             await addDoc(collection(db, 'idle_logs'), {
                 userId: user.id,
@@ -55,39 +48,48 @@ export function useActivityMonitor(user) {
 
   useEffect(() => {
     if (!user || user.onlineStatus === 'Break') {
-        // If on break, clear all timers and stop tracking
         clearTimeout(timeoutRef.current);
         clearInterval(heartbeatRef.current);
         return; 
     }
 
     // 1. Initial Setup
-    if(user.onlineStatus !== 'Online' && user.onlineStatus !== 'Idle') setStatus('Online');
+    // if(user.onlineStatus !== 'Online' && user.onlineStatus !== 'Idle') setStatus('Online');
 
     const handleActivity = () => {
       if (user.onlineStatus === 'Break') return;
 
-      // If waking up from Idle
       if (isIdle.current) {
         isIdle.current = false;
-        logIdleTime(); // <--- Save the idle duration to DB
+        logIdleTime(); 
+        // We still call setStatus('Online') here to "wake up" the UI when they return to the tab
         setStatus('Online');
       }
 
-      // Reset Timer
       clearTimeout(timeoutRef.current);
       timeoutRef.current = setTimeout(() => {
         isIdle.current = true;
-        idleStartTime.current = Date.now(); // <--- Start the stopwatch
-        setStatus('Idle');
+        idleStartTime.current = Date.now(); 
+
+        // 🚨 COMMENTED OUT TO FIX TAB-SWITCH ISSUE 🚨
+        // We stop the browser from writing "Idle" to the user document.
+        // The Desktop Tracker will handle this via hardware monitoring instead.
+        
+        // setStatus('Idle'); 
+        
+        console.log("Web app detected inactivity, but deferring to Desktop Tracker for status update.");
       }, IDLE_THRESHOLD);
     };
 
     const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart'];
     events.forEach(evt => window.addEventListener(evt, handleActivity));
 
+    // Heartbeat for web app - we can keep this for lastSeen updates, or disable it 
+    // to give Desktop Tracker full authority.
     heartbeatRef.current = setInterval(() => {
-        if (!isIdle.current && user.onlineStatus !== 'Break') setStatus('Online');
+        if (!isIdle.current && user.onlineStatus !== 'Break') {
+             // setStatus('Online'); // Also optional to comment this out
+        }
     }, HEARTBEAT_INTERVAL);
 
     return () => {
@@ -95,5 +97,5 @@ export function useActivityMonitor(user) {
       clearTimeout(timeoutRef.current);
       clearInterval(heartbeatRef.current);
     };
-  }, [user.onlineStatus]); // Re-run if status changes (e.g. they enter/exit Break)
+  }, [user.onlineStatus, user.id]); 
 }
