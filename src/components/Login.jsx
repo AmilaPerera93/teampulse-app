@@ -9,32 +9,30 @@ export default function Login() {
   const navigate = useNavigate();
   
   const [status, setStatus] = useState('Checking Security...');
-  
-  // RESTORED: Default is FALSE so members see the "Download" prompt
   const [showAdminLogin, setShowAdminLogin] = useState(false);
-  
-  // Admin Form State
   const [adminUser, setAdminUser] = useState('');
   const [adminPass, setAdminPass] = useState('');
 
-  // 1. AUTO-LOGIN WITH TOKEN (From Electron App)
   useEffect(() => {
     const token = searchParams.get('token');
     if (token) {
         setStatus("Verifying Secure Session...");
-        loginWithToken(token).then(success => {
-            if (success) {
-                navigate('/');
-            } else {
-                setStatus("Session Expired. Please restart the Desktop App.");
-            }
-        });
+        // Use a slight delay to ensure the Firestore write from Electron is finished
+        const timer = setTimeout(() => {
+            loginWithToken(token).then(success => {
+                if (success) {
+                    navigate('/', { replace: true });
+                } else {
+                    setStatus("Session Expired. Please restart the Desktop App.");
+                }
+            });
+        }, 1000);
+        return () => clearTimeout(timer);
     } else {
         setStatus("Waiting for Desktop App...");
     }
-  }, [searchParams]);
+  }, [searchParams, loginWithToken, navigate]);
 
-  // 2. ADMIN LOGIN HANDLER
   const handleAdminLogin = async (e) => {
       e.preventDefault();
       const success = await login(adminUser, adminPass);  
@@ -53,7 +51,6 @@ export default function Login() {
         
         <h1 className="text-3xl font-extrabold text-slate-800 mb-2">TeamPulse Secure</h1>
 
-        {/* --- SCENARIO A: NORMAL MEMBER (NO TOKEN) --- */}
         {!searchParams.get('token') && !showAdminLogin && (
             <div className="w-full mt-4">
                 <div className="bg-blue-50 text-blue-800 p-4 rounded-xl text-sm font-medium mb-6">
@@ -77,7 +74,6 @@ export default function Login() {
             </div>
         )}
 
-        {/* --- SCENARIO B: VERIFYING TOKEN --- */}
         {searchParams.get('token') && (
             <div className="mt-8 flex flex-col items-center">
                 <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
@@ -85,7 +81,6 @@ export default function Login() {
             </div>
         )}
 
-        {/* --- SCENARIO C: ADMIN LOGIN FORM --- */}
         {showAdminLogin && (
             <form onSubmit={handleAdminLogin} className="w-full text-left mt-6 animate-in fade-in slide-in-from-bottom-4">
                 <div className="flex justify-between items-center mb-4">
