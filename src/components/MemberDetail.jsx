@@ -80,8 +80,8 @@ export default function MemberDetail() {
       idlData.forEach((log, index) => {
           const duration = Number(log.durationMs) || 0;
           const TEN_MINS = 10 * 60 * 1000;
-          const SPECIFIC_50S = 50 * 1000;
-          const SPECIFIC_110S = 110 * 1000;
+          //const SPECIFIC_50S = 50 * 1000;
+          //const SPECIFIC_110S = 110 * 1000;
 
           // SCENARIO 1: Record is 10 minutes or longer
           if (duration >= TEN_MINS) {

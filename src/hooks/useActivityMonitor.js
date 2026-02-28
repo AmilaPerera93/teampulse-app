@@ -3,8 +3,8 @@ import { db } from '../firebase';
 import { doc, updateDoc, serverTimestamp, addDoc, collection } from 'firebase/firestore';
 
 // 5 Minutes Idle Threshold (Normal usage)
-const IDLE_THRESHOLD = 20 * 1000; // Updated to your 20s test limit
-const HEARTBEAT_INTERVAL = 2 * 60 * 1000;
+const IDLE_THRESHOLD = 5 * 60 * 1000;
+const HEARTBEAT_INTERVAL = 10 * 60 * 1000;
 
 export function useActivityMonitor(user) {
   const timeoutRef = useRef(null);
@@ -71,7 +71,7 @@ export function useActivityMonitor(user) {
         isIdle.current = true;
         idleStartTime.current = Date.now(); 
 
-        // 🚨 COMMENTED OUT TO FIX TAB-SWITCH ISSUE 🚨
+        // COMMENTED OUT TO FIX TAB-SWITCH ISSUE
         // We stop the browser from writing "Idle" to the user document.
         // The Desktop Tracker will handle this via hardware monitoring instead.
         
