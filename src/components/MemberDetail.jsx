@@ -93,9 +93,9 @@ export default function MemberDetail() {
               patternBuffer = [];
           } 
           // SCENARIO 2: Specific pattern detection (Exactly 50s or 110s)
-          else if (duration === SPECIFIC_50S || duration === SPECIFIC_110S) {
+          /*else if (duration === SPECIFIC_50S || duration === SPECIFIC_110S) {
               patternBuffer.push(duration);
-          } 
+          } */
           // Reset buffer if record doesn't match criteria
           else {
               if (patternBuffer.length >= 3) {
