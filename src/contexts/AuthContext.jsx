@@ -8,7 +8,8 @@ import {
   doc, 
   updateDoc, 
   serverTimestamp, 
-  onSnapshot 
+  onSnapshot,
+  addDoc 
 } from 'firebase/firestore'; 
 
 const AuthContext = createContext();
@@ -35,9 +36,6 @@ export function AuthProvider({ children }) {
         if (docSnap.exists()) {
             const freshData = { id: docSnap.id, ...docSnap.data() };
             
-            // ✅ FIX: Added !loading check. 
-            // This prevents the security guard from kicking you out 
-            // while the loginWithToken process is still finishing.
             if (freshData.role !== 'ADMIN' && !freshData.sessionToken && !loading) {
                  console.warn("Security Alert: No Desktop Session detected. Terminating session.");
                  logout(); 
@@ -56,7 +54,7 @@ export function AuthProvider({ children }) {
     });
 
     return () => unsub();
-  }, [currentUser?.id, loading]); // Added loading to dependency array
+  }, [currentUser?.id, loading]);
 
   async function login(username, password) {
     setLoading(true);
@@ -110,7 +108,7 @@ export function AuthProvider({ children }) {
   }
 
   async function loginWithToken(token) {
-    setLoading(true); // Triggers the !loading guard in useEffect
+    setLoading(true);
     isLoggingOut.current = false;
     try {
         const q = query(collection(db, 'users'), where('sessionToken', '==', token));
@@ -126,7 +124,6 @@ export function AuthProvider({ children }) {
         setCurrentUser(userData);
         localStorage.setItem('teampulse_user', JSON.stringify(userData));
         
-        // Give the state 1 second to settle before turning off loading
         setTimeout(() => setLoading(false), 1000); 
         return true;
     } catch (e) {
@@ -135,6 +132,7 @@ export function AuthProvider({ children }) {
     }
   }
 
+  // --- UPDATED: Logout with task pausing ---
   async function logout() {
     isLoggingOut.current = true;
 
@@ -173,11 +171,71 @@ export function AuthProvider({ children }) {
     setCurrentUser(null);
   }
 
+  // --- NEW: Start Break (Pauses Tasks) ---
+  async function startBreak() {
+    if (!currentUser) return;
+    try {
+      const qRunning = query(
+        collection(db, 'tasks'),
+        where('assignedTo', '==', currentUser.fullname),
+        where('isRunning', '==', true)
+      );
+      const runningSnap = await getDocs(qRunning);
+      
+      const pausePromises = runningSnap.docs.map(tDoc => {
+        const tData = tDoc.data();
+        const session = tData.lastStartTime ? (Date.now() - tData.lastStartTime) : 0;
+        return updateDoc(doc(db, 'tasks', tDoc.id), {
+          isRunning: false,
+          lastStartTime: null,
+          elapsedMs: (tData.elapsedMs || 0) + session
+        });
+      });
+      await Promise.all(pausePromises);
+
+      await updateDoc(doc(db, 'users', currentUser.id), { onlineStatus: 'Break' });
+      await addDoc(collection(db, 'breaks'), {
+        userId: currentUser.id,
+        userName: currentUser.fullname,
+        startTime: Date.now(),
+        date: new Date().toISOString().split('T')[0],
+        status: 'active'
+      });
+    } catch (e) { console.error("Start Break Error:", e); }
+  }
+
+  // --- NEW: End Break ---
+  async function endBreak() {
+    if (!currentUser) return;
+    try {
+      const q = query(
+        collection(db, 'breaks'), 
+        where('userId', '==', currentUser.id), 
+        where('status', '==', 'active')
+      );
+      const snap = await getDocs(q);
+      
+      if (!snap.empty) {
+        const breakDoc = snap.docs[0];
+        const duration = Date.now() - breakDoc.data().startTime;
+        await updateDoc(doc(db, 'breaks', breakDoc.id), {
+          endTime: Date.now(),
+          durationMs: duration,
+          status: 'completed'
+        });
+      }
+
+      await updateDoc(doc(db, 'users', currentUser.id), { onlineStatus: 'Online' });
+    } catch (e) { console.error("End Break Error:", e); }
+  }
+
   const value = {
     currentUser,
     login,
     loginWithToken,
     logout,
+    startBreak,
+    endBreak,
     loading,
     resetUserPassword: async (uid, newPass) => {
         await updateDoc(doc(db, 'users', uid), { password: newPass });
