@@ -61,13 +61,13 @@ export function useActivityMonitor(user) {
 
       if (isIdle.current) {
         isIdle.current = false;
-        logIdleTime(); 
+        //logIdleTime(); 
         // We still call setStatus('Online') here to "wake up" the UI when they return to the tab
         setStatus('Online');
       }
 
       clearTimeout(timeoutRef.current);
-      timeoutRef.current = setTimeout(() => {
+      /*timeoutRef.current = setTimeout(() => {
         isIdle.current = true;
         idleStartTime.current = Date.now(); 
 
@@ -78,7 +78,7 @@ export function useActivityMonitor(user) {
         // setStatus('Idle'); 
         
         console.log("Web app detected inactivity, but deferring to Desktop Tracker for status update.");
-      }, IDLE_THRESHOLD);
+      }, IDLE_THRESHOLD);*/
     };
 
     const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart'];
