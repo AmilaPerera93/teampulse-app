@@ -11,7 +11,7 @@ import { doc, updateDoc, addDoc, collection, serverTimestamp } from 'firebase/fi
 import { 
   Zap, LayoutGrid, Users, FolderOpen, 
   CheckCircle, History, LogOut, Calendar, Plus,
-  Briefcase, DollarSign, BarChart3, Pause, Play, ZapOff, Coffee, Lock, Loader2, Gamepad2, Presentation, BookOpen
+  Briefcase, DollarSign, BarChart3, Pause, Play, ZapOff, Coffee, Lock, Loader2, Gamepad2, Presentation, BookOpen, FolderKanban
 } from 'lucide-react';
 
 // Format Helper
@@ -188,7 +188,7 @@ export default function Layout() {
               <div className="px-6 text-xs font-extrabold text-text-sec mb-3 tracking-wider">MANAGEMENT</div>
               <NavItem to="/" icon={LayoutGrid} label="Dashboard" />
               <NavItem to="/meeting" icon={Presentation} label="Morning Standup" />
-              <NavItem to="/users" icon={Users} label="Team" />
+              <NavItem to="/projecthub" icon={FolderKanban} label="Project Hub" />
               <NavItem to="/projects" icon={FolderOpen} label="Projects" />
               <NavItem to="/training" icon={BookOpen} label="Academy" />
               <NavItem to="/leaves" icon={Calendar} label="Leave Requests" />
@@ -203,6 +203,7 @@ export default function Layout() {
             <>
               <div className="px-6 text-xs font-extrabold text-text-sec mb-3 tracking-wider">YOUR WORK</div>
               <NavItem to="/" icon={CheckCircle} label="Today's Tasks" />
+              <NavItem to="/projecthub" icon={FolderKanban} label="Project Hub" />
               <NavItem to="/training" icon={BookOpen} label="Academy" />
               <NavItem to="/leaves" icon={Calendar} label="My Leave" />
               <NavItem to="/history" icon={History} label="History Log" />

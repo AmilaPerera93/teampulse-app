@@ -16,6 +16,7 @@ import HistoryLog from './components/HistoryLog';
 import GameZone from './components/GameZone';
 import MorningMeeting from './components/MorningMeeting';
 import TrainingManager from './components/TrainingManager';
+import ProjectHub from './components/ProjectHub';
 
 function ProtectedRoute({ children }) {
   const { currentUser } = useAuth();
@@ -51,7 +52,7 @@ export default function App() {
           <Route path="game" element={<GameZone />} />
           <Route path="meeting" element={<MorningMeeting />} /> 
           <Route path="training" element={<TrainingManager />} />
-
+          <Route path="/projecthub" element={<ProjectHub />} />
         </Route>
       </Routes>
     </BrowserRouter>
