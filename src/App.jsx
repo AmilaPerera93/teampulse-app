@@ -53,6 +53,7 @@ export default function App() {
           <Route path="meeting" element={<MorningMeeting />} /> 
           <Route path="training" element={<TrainingManager />} />
           <Route path="/projecthub" element={<ProjectHub />} />
+          <Route path="/users" element={<UsersManager />} />
         </Route>
       </Routes>
     </BrowserRouter>

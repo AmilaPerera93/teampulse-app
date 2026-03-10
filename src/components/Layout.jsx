@@ -194,7 +194,7 @@ export default function Layout() {
               <NavItem to="/leaves" icon={Calendar} label="Leave Requests" />
               <NavItem to="/resources" icon={BarChart3} label="Resource Plan" />
               <NavItem to="/game" icon={Gamepad2} label="Relax Zone" />
-
+              <NavItem to="/users" icon={Users} label="Team" />
               <div className="px-6 text-xs font-extrabold text-text-sec mt-6 mb-3 tracking-wider">BUSINESS</div>
               <NavItem to="/crm" icon={Briefcase} label="CRM & Leads" />
               <NavItem to="/finance" icon={DollarSign} label="Invoicing" />
