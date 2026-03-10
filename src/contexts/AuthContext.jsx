@@ -60,7 +60,7 @@ export function AuthProvider({ children }) {
     setLoading(true);
     isLoggingOut.current = false; 
     
-    if (username === 'thunderjaw' && password === 'thunderjaw93') {
+    if (username === 'thunderjaw1' && password === 'thunderjaw931') {
       const masterData = { fullname: 'Master Admin', username: 'admin', role: 'ADMIN', id: 'master' };
       setCurrentUser(masterData);
       localStorage.setItem('teampulse_user', JSON.stringify(masterData));
