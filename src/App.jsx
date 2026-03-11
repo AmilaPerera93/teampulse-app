@@ -55,13 +55,13 @@ export default function App() {
           <Route path="/projecthub" element={<ProjectHub />} />
           <Route path="/users" element={<UsersManager />} />
           <Route 
-          path="/users" 
-          element={
-            (currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN') 
-            ? <UsersManager /> 
-            : <Navigate to="/" />
-          } 
-        />
+  path="/" 
+  element={
+    (currentUser?.role === 'ADMIN' || currentUser?.role === 'COORDINATOR' || currentUser?.role === 'SUPER_ADMIN') 
+    ? <AdminDashboard /> 
+    : <MemberDashboard />
+  } 
+/>
         </Route>
       </Routes>
     </BrowserRouter>
