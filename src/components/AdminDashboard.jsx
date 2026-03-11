@@ -1,16 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, doc, deleteDoc } from 'firebase/firestore'; 
-import { useAuth } from '../contexts/AuthContext'; // Added useAuth
+import { useAuth } from '../contexts/AuthContext';
 import { useDate } from '../contexts/DateContext';
 import { useNavigate } from 'react-router-dom';
-import { ExternalLink, Trash2, ZapOff, CheckCircle, Edit2, ShieldAlert, UserCheck } from 'lucide-react';
+import { ExternalLink, Trash2, ZapOff, UserCheck, Edit2 } from 'lucide-react';
 import Timer from './Timer';
 import EditTaskModal from './EditTaskModal';
 
 export default function AdminDashboard() {
   const { globalDate } = useDate();
-  const { currentUser } = useAuth(); // Get current user role
+  const { currentUser } = useAuth();
   const navigate = useNavigate();
   
   const [users, setUsers] = useState([]);
@@ -19,6 +19,9 @@ export default function AdminDashboard() {
   const [, setTick] = useState(0);
 
   const [editingTask, setEditingTask] = useState(null); 
+
+  // Permission Checks
+  const hasFullAccess = currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN';
 
   useEffect(() => {
     const interval = setInterval(() => setTick(t => t + 1), 60000);
@@ -51,6 +54,7 @@ export default function AdminDashboard() {
 
   const handleDeleteTask = async (e, taskId) => {
     e.stopPropagation(); 
+    if(!hasFullAccess) return;
     if(confirm("Are you sure you want to delete this task?")) {
         await deleteDoc(doc(db, 'tasks', taskId));
     }
@@ -58,18 +62,16 @@ export default function AdminDashboard() {
 
   const handleEditTask = (e, task) => {
       e.stopPropagation();
+      if(!hasFullAccess) return;
       setEditingTask(task); 
   };
-
-  // Roles that can see full detail
-  const hasFullAccess = currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN';
 
   if (loading) return <div className="text-center p-20 text-slate-400 animate-pulse font-bold tracking-widest uppercase">Syncing Dashboard...</div>;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 animate-in fade-in pb-20 auto-rows-fr">
       {users.length === 0 && (
-        <div className="col-span-full text-center text-slate-400 p-10 bg-white rounded-3xl border-2 border-dashed border-slate-200">
+        <div className="col-span-full text-center text-slate-400 p-10 bg-white rounded-[32px] border-2 border-dashed border-slate-200">
             No active team members found for this workspace.
         </div>
       )}
@@ -102,12 +104,13 @@ export default function AdminDashboard() {
         return (
           <div 
             key={user.id} 
+            // Only Admins can navigate to private member detail pages
             onClick={() => hasFullAccess && navigate(`/member/${userName}`)} 
             className={`bg-white p-6 rounded-[32px] border-2 flex flex-col transition-all duration-300 relative group
                 ${hasFullAccess ? 'cursor-pointer hover:shadow-2xl hover:border-indigo-200' : 'cursor-default'}
                 ${displayStatus === 'Power Cut' ? 'border-red-100 bg-red-50/20' : 'border-slate-50'}`}
           >
-            {/* HOVER ICON FOR FULL ADMINS */}
+            {/* LINK ICON - HIDDEN FROM COORDINATORS */}
             {hasFullAccess && (
                 <div className="absolute top-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity text-indigo-600 bg-indigo-50 p-2 rounded-xl">
                     <ExternalLink size={16} />
@@ -144,18 +147,24 @@ export default function AdminDashboard() {
                             }`}>
                                 {statusText}
                             </span>
-                            {displayStatus === 'Power Cut' && <ZapOff size={10} className="text-red-600 animate-pulse"/>}
                         </div>
                     </div>
                 </div>
 
                 {/* EFFICIENCY - HIDDEN FROM COORDINATORS */}
-                {hasFullAccess && (
+                {hasFullAccess ? (
                     <div className="text-right">
                         <div className={`text-2xl font-black tabular-nums ${efficiency >= 80 ? 'text-emerald-600' : efficiency >= 50 ? 'text-amber-500' : 'text-slate-400'}`}>
                             {efficiency}%
                         </div>
                         <div className="text-[9px] text-slate-400 font-black uppercase tracking-widest">Efficiency</div>
+                    </div>
+                ) : (
+                    // Neutral indicator for Coordinators
+                    <div className="text-right">
+                        <div className="bg-slate-50 text-slate-300 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-slate-100">
+                           Active
+                        </div>
                     </div>
                 )}
             </div>
@@ -189,7 +198,7 @@ export default function AdminDashboard() {
                                         <Timer startTime={task.lastStartTime} elapsed={task.elapsedMs} isRunning={isRun} />
                                     </span>
                                     
-                                    {/* EDIT/DELETE - HIDDEN FROM COORDINATORS */}
+                                    {/* ACTIONS - HIDDEN FROM COORDINATORS */}
                                     {hasFullAccess && (
                                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
                                             <button 
