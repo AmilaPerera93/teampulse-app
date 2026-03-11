@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { db } from '../firebase';
 import { collection, onSnapshot, addDoc, deleteDoc, doc, query, where, getDocs } from 'firebase/firestore';
-import { Trash2, UserPlus, Shield, User, KeyRound, AlertCircle } from 'lucide-react';
+import { Trash2, UserPlus, Shield, User, KeyRound, AlertCircle, Briefcase } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function UsersManager() {
@@ -30,7 +30,6 @@ export default function UsersManager() {
     
     setLoading(true);
     try {
-        // Check for duplicate username
         const q = query(collection(db, 'users'), where('username', '==', formData.username));
         const snap = await getDocs(q);
         if(!snap.empty) {
@@ -112,6 +111,8 @@ export default function UsersManager() {
                     <select className="input-field" value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})}>
                         <option value="MEMBER">Team Member</option>
                         <option value="ADMIN">Administrator</option>
+                        {/* ✅ ADDED: Coordinator Role */}
+                        <option value="COORDINATOR">Coordinator</option> 
                     </select>
                 </div>
                 
@@ -141,15 +142,22 @@ export default function UsersManager() {
                 {users.map(u => (
                     <tr key={u.id} className="hover:bg-slate-50/80 transition-colors group">
                         <td className="p-4 font-bold text-slate-700 flex items-center gap-3">
-                            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold border-2 ${u.role === 'ADMIN' ? 'bg-purple-50 text-purple-600 border-purple-100' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold border-2 
+                              ${u.role === 'ADMIN' ? 'bg-purple-50 text-purple-600 border-purple-100' : 
+                                u.role === 'COORDINATOR' ? 'bg-blue-50 text-blue-600 border-blue-100' : 
+                                'bg-slate-100 text-slate-500 border-slate-200'}`}>
                                 {u.fullname.charAt(0)}
                             </div>
                             {u.fullname}
                         </td>
                         <td className="p-4 text-slate-500 font-mono text-sm">@{u.username}</td>
                         <td className="p-4">
-                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold border ${u.role === 'ADMIN' ? 'bg-purple-50 text-purple-700 border-purple-100' : 'bg-white text-slate-600 border-slate-200'}`}>
-                                {u.role === 'ADMIN' ? <Shield size={10}/> : <User size={10}/>} {u.role}
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold border 
+                              ${u.role === 'ADMIN' ? 'bg-purple-50 text-purple-700 border-purple-100' : 
+                                u.role === 'COORDINATOR' ? 'bg-blue-50 text-blue-700 border-blue-100' : 
+                                'bg-white text-slate-600 border-slate-200'}`}>
+                                {u.role === 'ADMIN' ? <Shield size={10}/> : 
+                                 u.role === 'COORDINATOR' ? <Briefcase size={10}/> : <User size={10}/>} {u.role}
                             </span>
                         </td>
                         <td className="p-4">
