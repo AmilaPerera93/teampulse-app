@@ -36,7 +36,8 @@ export function AuthProvider({ children }) {
         if (docSnap.exists()) {
             const freshData = { id: docSnap.id, ...docSnap.data() };
             
-            if (freshData.role !== 'ADMIN' && !freshData.sessionToken && !loading) {
+            // Allow both Admin and Coordinator to bypass the token check
+if (freshData.role !== 'ADMIN' && freshData.role !== 'COORDINATOR' && !freshData.sessionToken && !loading) {
                  console.warn("Security Alert: No Desktop Session detected. Terminating session.");
                  logout(); 
                  return;
@@ -85,7 +86,7 @@ export function AuthProvider({ children }) {
       const docSnap = querySnapshot.docs[0];
       const userData = { id: docSnap.id, ...docSnap.data() };
       
-      if (userData.role !== 'ADMIN') {
+      if (userData.role !== 'ADMIN' && userData.role !== 'COORDINATOR') {
          alert("ACCESS DENIED: Team Members must use the Desktop App.");
          setLoading(false);
          return false;
