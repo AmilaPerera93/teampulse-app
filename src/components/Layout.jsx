@@ -14,7 +14,6 @@ import {
   Briefcase, DollarSign, BarChart3, Pause, Play, ZapOff, Coffee, Lock, Loader2, Gamepad2, Presentation, BookOpen, FolderKanban
 } from 'lucide-react';
 
-// Format Helper
 const formatDuration = (ms) => {
   if (!ms) return "00:00:00";
   const totalSeconds = Math.floor(ms / 1000);
@@ -24,7 +23,6 @@ const formatDuration = (ms) => {
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 };
 
-// --- GLOBAL TIMER WIDGET ---
 function GlobalTimerWidget() {
   const { activeTask, activeInterruption, stopTask } = useTimer();
 
@@ -55,22 +53,18 @@ function GlobalTimerWidget() {
   );
 }
 
-// --- MAIN LAYOUT COMPONENT ---
 export default function Layout() {
   const { currentUser, logout, changePassword } = useAuth(); 
   const { globalDate, setGlobalDate } = useDate(); 
   const { stopTask, activeTask } = useTimer(); 
   const [isModalOpen, setIsModalOpen] = useState(false); 
   const [breakElapsed, setBreakElapsed] = useState(0);
-  
-  // --- NEW: Loading State for Break Button ---
   const [breakLoading, setBreakLoading] = useState(false);
 
   const navigate = useNavigate();
 
   useActivityMonitor(currentUser); 
 
-  // Break Timer
   useEffect(() => {
     let interval;
     if (currentUser?.onlineStatus === 'Break' && currentUser?.lastBreakStart) {
@@ -89,14 +83,13 @@ export default function Layout() {
 
   const toggleBreak = async () => {
     if (!currentUser) return;
-    if (breakLoading) return; // Prevent double clicks
+    if (breakLoading) return;
 
-    setBreakLoading(true); // Disable button immediately
+    setBreakLoading(true);
     const userRef = doc(db, 'users', currentUser.id);
 
     try {
         if (currentUser.onlineStatus === 'Break') {
-            // END BREAK
             const duration = Date.now() - (currentUser.lastBreakStart || Date.now());
             if (duration > 1000) {
                 await addDoc(collection(db, 'breaks'), {
@@ -107,15 +100,14 @@ export default function Layout() {
             }
             await updateDoc(userRef, { onlineStatus: 'Online', lastSeen: serverTimestamp(), lastBreakStart: null });
         } else {
-            // START BREAK (Stop active task first)
             if (activeTask) await stopTask();
             await updateDoc(userRef, { onlineStatus: 'Break', lastSeen: serverTimestamp(), lastBreakStart: Date.now() });
         }
     } catch (error) {
         console.error("Break toggle failed:", error);
-        alert("Failed to toggle break. Please check your connection.");
+        alert("Failed to toggle break.");
     } finally {
-        setBreakLoading(false); // Re-enable button
+        setBreakLoading(false);
     }
   };
 
@@ -141,14 +133,15 @@ export default function Layout() {
             <Zap size={24} fill="currentColor" /> TeamPulse
           </div>
           <div className="text-sm font-semibold text-text-sec mt-2 pl-8">{currentUser?.fullname}</div>
+          <div className="text-[10px] font-black text-primary/60 uppercase tracking-widest pl-8 mt-1">{currentUser?.role}</div>
         </div>
 
-        {/* --- BREAK BUTTON (With Loading Protection) --- */}
-        {currentUser?.role !== 'ADMIN' && (
+        {/* BREAK BUTTON */}
+        {(currentUser?.role !== 'ADMIN' && currentUser?.role !== 'COORDINATOR' && currentUser?.role !== 'SUPER_ADMIN') && (
             <div className="px-4 pt-6 pb-2">
                 <button 
                 onClick={toggleBreak}
-                disabled={breakLoading} // <--- PHYSICALLY DISABLE
+                disabled={breakLoading}
                 className={`w-full py-3 px-4 rounded-xl font-bold shadow-sm transition-all flex items-center justify-center gap-3 ${
                     breakLoading ? 'opacity-70 cursor-wait' : ''
                 } ${
@@ -183,7 +176,8 @@ export default function Layout() {
         )}
 
         <div className="flex-1 py-4 overflow-y-auto no-scrollbar">
-          {currentUser?.role === 'ADMIN' ? (
+          {/* --- ADMIN & SUPER_ADMIN VIEW --- */}
+          {(currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN') ? (
             <>
               <div className="px-6 text-xs font-extrabold text-text-sec mb-3 tracking-wider">MANAGEMENT</div>
               <NavItem to="/" icon={LayoutGrid} label="Dashboard" />
@@ -199,8 +193,17 @@ export default function Layout() {
               <NavItem to="/crm" icon={Briefcase} label="CRM & Leads" />
               <NavItem to="/finance" icon={DollarSign} label="Invoicing" />
             </>
+          ) : currentUser?.role === 'COORDINATOR' ? (
+            <>
+              {/* --- COORDINATOR VIEW (NEW) --- */}
+              <div className="px-6 text-xs font-extrabold text-text-sec mb-3 tracking-wider">COORDINATION</div>
+              <NavItem to="/" icon={LayoutGrid} label="Dashboard" />
+              <NavItem to="/projecthub" icon={FolderKanban} label="Project Hub" />
+              <NavItem to="/game" icon={Gamepad2} label="Relax Zone" />
+            </>
           ) : (
             <>
+              {/* --- MEMBER VIEW --- */}
               <div className="px-6 text-xs font-extrabold text-text-sec mb-3 tracking-wider">YOUR WORK</div>
               <NavItem to="/" icon={CheckCircle} label="Today's Tasks" />
               <NavItem to="/projecthub" icon={FolderKanban} label="Project Hub" />
@@ -231,7 +234,8 @@ export default function Layout() {
               <Calendar size={16} className="text-text-sec" />
               <input type="date" className="bg-transparent border-none outline-none text-sm font-semibold text-text-main cursor-pointer" value={globalDate} onChange={(e) => setGlobalDate(e.target.value)} />
             </div>
-            {currentUser?.role === 'ADMIN' && (
+            {/* ✅ "Assign Task" enabled for Coordinators and Admins */}
+            {(currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'COORDINATOR') && (
                 <button onClick={() => setIsModalOpen(true)} className="btn btn-primary shadow-md shadow-indigo-200"><Plus size={18} /> Assign Task</button>
             )}
           </div>
