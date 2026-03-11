@@ -27,6 +27,9 @@ function ProtectedRoute({ children }) {
 export default function App() {
   const { currentUser } = useAuth();
 
+  // Define who sees the Management Dashboard (Admin grid)
+  const isManagement = ['ADMIN', 'COORDINATOR', 'SUPER_ADMIN'].includes(currentUser?.role);
+
   return (
     <BrowserRouter>
       <Routes>
@@ -37,8 +40,9 @@ export default function App() {
             <Layout />
           </ProtectedRoute>
         }>
+          {/* ✅ FIXED: Single Index Route with full role check */}
           <Route index element={
-            currentUser?.role === 'ADMIN' ? <AdminDashboard /> : <MemberDashboard />
+            isManagement ? <AdminDashboard /> : <MemberDashboard />
           } /> 
           
           <Route path="users" element={<UsersManager />} />
@@ -48,20 +52,11 @@ export default function App() {
           <Route path="finance" element={<InvoiceManager />} />   
           <Route path="resources" element={<ResourcePlanner />} />
           <Route path="leaves" element={<LeaveManager />} />
-          <Route path="/history" element={<HistoryLog />} />
+          <Route path="history" element={<HistoryLog />} />
           <Route path="game" element={<GameZone />} />
           <Route path="meeting" element={<MorningMeeting />} /> 
           <Route path="training" element={<TrainingManager />} />
-          <Route path="/projecthub" element={<ProjectHub />} />
-          <Route path="/users" element={<UsersManager />} />
-          <Route 
-  path="/" 
-  element={
-    (currentUser?.role === 'ADMIN' || currentUser?.role === 'COORDINATOR' || currentUser?.role === 'SUPER_ADMIN') 
-    ? <AdminDashboard /> 
-    : <MemberDashboard />
-  } 
-/>
+          <Route path="projecthub" element={<ProjectHub />} />
         </Route>
       </Routes>
     </BrowserRouter>
