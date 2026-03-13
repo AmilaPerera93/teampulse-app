@@ -69,28 +69,24 @@ export default function MemberDetail() {
       const brkMs = brkData.reduce((acc, i) => acc + (Number(i.durationMs) || 0), 0);
       const pwrMs = pwrLogs.reduce((acc, i) => acc + (Number(i.durationMs) || 0), 0);
 
-      // --- NEW DENSITY-BASED PATTERN DETECTION ---
+      // --- SILENT PATTERN DETECTION (The "Jiggler" Hunter) ---
       let calculatedIdleMs = 0;
       
-      // Filter for Long Breaks (10+ mins) - Always counted
+      // 1. Long Breaks (10+ mins) - Always counted
       const longBreaksList = idlData.filter(log => (Number(log.durationMs) || 0) >= 600000);
       
-      // Filter for suspicious short bursts (20s to 5 mins)
+      // 2. Suspicious bursts (20s to 5 mins)
       const suspiciousBursts = idlData.filter(log => {
           const d = Number(log.durationMs) || 0;
           return d >= 20000 && d < 300000;
       });
 
-      // Always add long breaks to the idle total
-      longBreaksList.forEach(log => {
-          calculatedIdleMs += Number(log.durationMs);
-      });
+      // Add long breaks to total
+      longBreaksList.forEach(log => { calculatedIdleMs += Number(log.durationMs); });
 
-      // SAWTOOTH CHECK: If there are 5 or more short idle bursts in one day, flag as script
+      // SCRIPTS: If we find 5+ short bursts, add them all to Filtered Idle
       const isScriptPatternActive = suspiciousBursts.length >= 5;
-
       if (isScriptPatternActive) {
-          // Add EVERY suspicious burst to the filtered idle total
           suspiciousBursts.forEach(log => {
               calculatedIdleMs += Number(log.durationMs);
           });
@@ -135,7 +131,7 @@ export default function MemberDetail() {
 
   const score = stats.netAvailable > 0 ? Math.round((stats.worked / (stats.worked + stats.idle)) * 100) : 0;
 
-  if (loading) return <div className="p-20 text-center animate-pulse text-slate-400 font-bold">Analysing Logs...</div>;
+  if (loading) return <div className="p-20 text-center animate-pulse text-slate-400 font-bold uppercase tracking-widest">Analysing Logs...</div>;
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-20 animate-in fade-in duration-700">
@@ -146,25 +142,26 @@ export default function MemberDetail() {
                 <ArrowLeft size={20} />
             </button>
             <div>
-                <h1 className="text-3xl font-black text-slate-900">{username}</h1>
-                <p className="text-xs text-slate-400 font-bold tracking-widest uppercase">{globalDate}</p>
+                <h1 className="text-3xl font-black text-slate-900 leading-none">{username}</h1>
+                <p className="text-xs text-slate-400 font-bold tracking-widest uppercase mt-1">{globalDate}</p>
             </div>
             {stats.scriptDetected && (
-                <div className="flex items-center gap-2 bg-red-50 text-red-600 px-4 py-2 rounded-2xl border border-red-100 animate-bounce">
+                <div className="flex items-center gap-2 bg-red-50 text-red-600 px-4 py-2 rounded-2xl border border-red-100">
                     <ShieldAlert size={18} />
-                    <span className="text-[10px] font-black uppercase tracking-tighter">Script Activity Detected</span>
+                    <span className="text-[10px] font-black uppercase tracking-tighter">Activity Alert</span>
                 </div>
             )}
         </div>
         <div className="flex gap-3">
             {activeInt ? (
-                <button onClick={resumeMember} className="btn bg-emerald-500 text-white hover:bg-emerald-600 shadow-xl shadow-emerald-100 px-6 rounded-2xl font-bold">Resume Member</button>
+                <button onClick={resumeMember} className="btn bg-emerald-500 text-white hover:bg-emerald-600 shadow-xl shadow-emerald-100 px-6 rounded-2xl font-bold transition-all">Resume Member</button>
             ) : (
-                <button onClick={reportPowerCut} className="btn btn-outline text-red-500 border-red-100 hover:bg-red-50 px-6 rounded-2xl font-bold">Report Power Cut</button>
+                <button onClick={reportPowerCut} className="btn btn-outline text-red-500 border-red-100 hover:bg-red-50 px-6 rounded-2xl font-bold transition-all">Report Power Cut</button>
             )}
         </div>
       </div>
 
+      {/* METRIC CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <MetricCard label="Worked" value={formatDuration(stats.worked)} color="border-l-indigo-500 text-indigo-600" />
         <MetricCard label="Filtered Idle" value={formatDuration(stats.idle)} color="border-l-amber-500 text-amber-600" />
@@ -175,29 +172,22 @@ export default function MemberDetail() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
+            {/* CLEAN LIVE STREAM FOR HR */}
             <Section title="Live Idle Stream" icon={<AlertCircle size={16} className="text-amber-600"/>} css="bg-white border-slate-100 shadow-sm">
-                 {idleLogs.length === 0 ? <span className="italic text-slate-400 text-xs">No records found.</span> : idleLogs.map((log, i) => {
-                    const duration = Number(log.durationMs) || 0;
-                    // Highlight the specific 30-40s bursts from the script
-                    const isScriptLength = duration >= 20000 && duration <= 60000;
-                    return (
-                        <div key={i} className={`flex justify-between p-3 rounded-xl border mb-2 text-sm transition-all ${isScriptLength ? 'bg-red-50 border-red-100 text-red-800 font-bold' : 'bg-slate-50 border-slate-100 text-slate-600'}`}>
-                            <div className="flex items-center gap-2">
-                                <span className="font-mono">
-                                    {log.startTime ? new Date(log.startTime).toLocaleTimeString() : '...'}
-                                </span>
-                                {isScriptLength && <span className="text-[8px] font-black bg-red-200 px-1.5 py-0.5 rounded text-red-700 uppercase">Pattern Match</span>}
-                            </div>
-                            <span className="font-black">{formatDuration(duration)}</span>
-                        </div>
-                    );
-                 })}
+                 {idleLogs.length === 0 ? <span className="italic text-slate-400 text-xs">No records found.</span> : idleLogs.map((log, i) => (
+                    <div key={i} className="flex justify-between p-3.5 rounded-2xl border border-slate-100 bg-slate-50/50 mb-2 text-sm text-slate-600 transition-all hover:border-slate-200 hover:bg-white">
+                        <span className="font-mono font-bold tracking-tight">
+                            {log.startTime ? new Date(log.startTime).toLocaleTimeString() : '...'}
+                        </span>
+                        <span className="font-black tabular-nums">{formatDuration(log.durationMs)}</span>
+                    </div>
+                 ))}
             </Section>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Section title="Power Outages" icon={<ZapOff size={16} className="text-red-600"/>} css="bg-white border-slate-100 shadow-sm">
                     {powerLogs.map((log, i) => (
-                        <div key={i} className="flex justify-between p-3 bg-red-50/30 rounded-xl border border-red-100 mb-2 text-sm">
+                        <div key={i} className="flex justify-between p-3.5 bg-red-50/30 rounded-2xl border border-red-100 mb-2 text-sm">
                             <span className="text-slate-500 font-mono">{new Date(log.startTime).toLocaleTimeString()}</span>
                             <span className="font-bold text-red-700">{formatDuration(log.durationMs)}</span>
                         </div>
@@ -205,7 +195,7 @@ export default function MemberDetail() {
                 </Section>
                 <Section title="Breaks" icon={<Coffee size={16} className="text-blue-600"/>} css="bg-white border-slate-100 shadow-sm">
                     {breakLogs.map((log, i) => (
-                        <div key={i} className="flex justify-between p-3 bg-blue-50/30 rounded-xl border border-blue-100 mb-2 text-sm">
+                        <div key={i} className="flex justify-between p-3.5 bg-blue-50/30 rounded-2xl border border-blue-100 mb-2 text-sm">
                             <span className="text-slate-500 font-mono">{new Date(log.startTime).toLocaleTimeString()}</span>
                             <span className="font-bold text-blue-700">{formatDuration(log.durationMs)}</span>
                         </div>
@@ -213,40 +203,44 @@ export default function MemberDetail() {
                 </Section>
             </div>
             
-            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+            <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
                 <h3 className="font-bold mb-4 flex items-center gap-2 text-slate-700"><CheckCircle size={18} className="text-indigo-500"/> Task Performance</h3>
-                {tasks.map((t, i) => {
-                    const isDone = t.status === 'Done';
-                    return (
-                        <div key={i} className={`flex justify-between p-4 border-b last:border-0 hover:bg-slate-50 transition-all rounded-xl ${isDone ? 'opacity-60' : ''}`}>
-                            <div>
-                                <div className={`font-bold ${isDone ? 'line-through text-slate-400' : 'text-slate-700'}`}>{t.description}</div>
-                                <div className="text-[10px] text-slate-400 uppercase font-black tracking-widest">{t.project}</div>
+                <div className="divide-y divide-slate-50">
+                    {tasks.map((t, i) => {
+                        const isDone = t.status === 'Done';
+                        return (
+                            <div key={i} className={`flex justify-between py-4 hover:bg-slate-50/50 px-2 transition-all rounded-xl ${isDone ? 'opacity-50' : ''}`}>
+                                <div>
+                                    <div className={`font-bold ${isDone ? 'line-through text-slate-400' : 'text-slate-800'}`}>{t.description}</div>
+                                    <div className="text-[10px] text-slate-400 uppercase font-black tracking-widest mt-0.5">{t.project}</div>
+                                </div>
+                                <span className={`font-mono font-black ${isDone ? 'text-slate-400' : 'text-indigo-600'}`}>
+                                    {formatDuration(t.elapsedMs)}
+                                </span>
                             </div>
-                            <span className={`font-mono font-black ${isDone ? 'text-slate-400' : 'text-indigo-600'}`}>
-                                {formatDuration(t.elapsedMs)}
-                            </span>
-                        </div>
-                    );
-                })}
+                        );
+                    })}
+                </div>
             </div>
         </div>
 
         <div className="space-y-6 sticky top-6">
-            <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm flex flex-col items-center">
-                <h3 className="font-bold mb-6 text-slate-700 uppercase tracking-widest text-xs">Utilisation Split</h3>
-                <Doughnut data={{
-                    labels: ['Work', 'Idle', 'Break', 'Power'],
-                    datasets: [{
-                        data: [stats.worked, stats.idle, stats.breaks, stats.downtime],
-                        backgroundColor: ['#6366f1', '#f59e0b', '#3b82f6', '#ef4444'],
-                        borderWidth: 0,
-                        hoverOffset: 10
-                    }]
-                }} options={{ cutout: '75%' }} />
-                <div className="mt-6 text-center">
-                    <div className="text-4xl font-black text-slate-800">{score}%</div>
-                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Productivity Score</div>
+            <div className="bg-white p-10 rounded-[40px] border border-slate-100 shadow-sm flex flex-col items-center">
+                <h3 className="font-bold mb-8 text-slate-400 uppercase tracking-widest text-[10px]">Utilisation Split</h3>
+                <div className="w-full max-w-[200px]">
+                    <Doughnut data={{
+                        labels: ['Work', 'Idle', 'Break', 'Power'],
+                        datasets: [{
+                            data: [stats.worked, stats.idle, stats.breaks, stats.downtime],
+                            backgroundColor: ['#6366f1', '#f59e0b', '#3b82f6', '#ef4444'],
+                            borderWidth: 0,
+                            hoverOffset: 15
+                        }]
+                    }} options={{ cutout: '82%', plugins: { legend: { display: false } } }} />
+                </div>
+                <div className="mt-10 text-center">
+                    <div className="text-5xl font-black text-slate-900 tracking-tighter">{score}%</div>
+                    <div className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] mt-2">Productivity Score</div>
                 </div>
             </div>
         </div>
@@ -257,8 +251,8 @@ export default function MemberDetail() {
 
 function Section({ title, icon, children, css }) {
     return (
-        <div className={`p-6 rounded-3xl border ${css}`}>
-            <h3 className="font-bold mb-4 flex items-center gap-2 text-xs uppercase tracking-widest text-slate-800">{icon} {title}</h3>
+        <div className={`p-6 rounded-[32px] border ${css}`}>
+            <h3 className="font-black mb-5 flex items-center gap-2 text-[10px] uppercase tracking-[0.15em] text-slate-500">{icon} {title}</h3>
             <div className="max-h-80 overflow-y-auto pr-2 custom-scrollbar">{children}</div>
         </div>
     );
@@ -266,9 +260,9 @@ function Section({ title, icon, children, css }) {
 
 function MetricCard({ label, value, color }) {
     return (
-        <div className={`bg-white p-6 rounded-3xl border-l-8 shadow-sm transition-transform hover:scale-[1.02] ${color}`}>
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{label}</p>
-            <p className="text-3xl font-black">{value}</p>
+        <div className={`bg-white p-6 rounded-[32px] border-l-[10px] shadow-sm transition-all hover:shadow-md ${color}`}>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">{label}</p>
+            <p className="text-3xl font-black tracking-tight tabular-nums">{value}</p>
         </div>
     );
 }
