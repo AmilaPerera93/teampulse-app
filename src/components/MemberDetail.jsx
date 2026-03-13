@@ -69,38 +69,32 @@ export default function MemberDetail() {
       const brkMs = brkData.reduce((acc, i) => acc + (Number(i.durationMs) || 0), 0);
       const pwrMs = pwrLogs.reduce((acc, i) => acc + (Number(i.durationMs) || 0), 0);
 
-      // --- ADVANCED PATTERN DETECTION (ANTI-SCRIPT) ---
+      // --- NEW DENSITY-BASED PATTERN DETECTION ---
       let calculatedIdleMs = 0;
-      let patternBuffer = [];
-      let isScriptPatternActive = false;
-      let scriptBurstCount = 0;
-
-      idlData.forEach((log, index) => {
-          const duration = Number(log.durationMs) || 0;
-          const TEN_MINS = 10 * 60 * 1000;
-          const SCRIPT_MIN = 28 * 1000; // ~30s
-          const SCRIPT_MAX = 45 * 1000; // ~40s
-
-          // 1. STANDARD IDLE (10+ Minutes)
-          if (duration >= TEN_MINS) {
-              calculatedIdleMs += duration;
-          } 
-          
-          // 2. SAWTOOTH PATTERN (VBScript Detection)
-          else if (duration >= SCRIPT_MIN && duration <= SCRIPT_MAX) {
-              scriptBurstCount++;
-              patternBuffer.push(duration);
-              
-              // If we see 3 bursts in a row, flag as script and count all bursts
-              if (scriptBurstCount >= 3) {
-                  isScriptPatternActive = true;
-                  calculatedIdleMs += duration;
-              }
-          } 
-          else {
-              scriptBurstCount = 0; // Reset if they actually move normally
-          }
+      
+      // Filter for Long Breaks (10+ mins) - Always counted
+      const longBreaksList = idlData.filter(log => (Number(log.durationMs) || 0) >= 600000);
+      
+      // Filter for suspicious short bursts (20s to 5 mins)
+      const suspiciousBursts = idlData.filter(log => {
+          const d = Number(log.durationMs) || 0;
+          return d >= 20000 && d < 300000;
       });
+
+      // Always add long breaks to the idle total
+      longBreaksList.forEach(log => {
+          calculatedIdleMs += Number(log.durationMs);
+      });
+
+      // SAWTOOTH CHECK: If there are 5 or more short idle bursts in one day, flag as script
+      const isScriptPatternActive = suspiciousBursts.length >= 5;
+
+      if (isScriptPatternActive) {
+          // Add EVERY suspicious burst to the filtered idle total
+          suspiciousBursts.forEach(log => {
+              calculatedIdleMs += Number(log.durationMs);
+          });
+      }
 
       const standardDay = 8 * 60 * 60 * 1000;
       const netAvailable = Math.max(0, standardDay - pwrMs - brkMs);
@@ -183,16 +177,18 @@ export default function MemberDetail() {
         <div className="lg:col-span-2 space-y-6">
             <Section title="Live Idle Stream" icon={<AlertCircle size={16} className="text-amber-600"/>} css="bg-white border-slate-100 shadow-sm">
                  {idleLogs.length === 0 ? <span className="italic text-slate-400 text-xs">No records found.</span> : idleLogs.map((log, i) => {
-                    const isScriptLength = log.durationMs >= 28000 && log.durationMs <= 45000;
+                    const duration = Number(log.durationMs) || 0;
+                    // Highlight the specific 30-40s bursts from the script
+                    const isScriptLength = duration >= 20000 && duration <= 60000;
                     return (
-                        <div key={i} className={`flex justify-between p-3 rounded-xl border mb-2 text-sm transition-all ${isScriptLength ? 'bg-red-50 border-red-100 text-red-800' : 'bg-slate-50 border-slate-100 text-slate-600'}`}>
+                        <div key={i} className={`flex justify-between p-3 rounded-xl border mb-2 text-sm transition-all ${isScriptLength ? 'bg-red-50 border-red-100 text-red-800 font-bold' : 'bg-slate-50 border-slate-100 text-slate-600'}`}>
                             <div className="flex items-center gap-2">
-                                <span className="font-mono font-bold">
+                                <span className="font-mono">
                                     {log.startTime ? new Date(log.startTime).toLocaleTimeString() : '...'}
                                 </span>
-                                {isScriptLength && <span className="text-[8px] font-black bg-red-200 px-1.5 py-0.5 rounded text-red-700 uppercase">Script?</span>}
+                                {isScriptLength && <span className="text-[8px] font-black bg-red-200 px-1.5 py-0.5 rounded text-red-700 uppercase">Pattern Match</span>}
                             </div>
-                            <span className="font-black">{formatDuration(log.durationMs)}</span>
+                            <span className="font-black">{formatDuration(duration)}</span>
                         </div>
                     );
                  })}
